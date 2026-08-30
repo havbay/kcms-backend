@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,8 @@ from kcms.settings import settings
 from kcms.shared.database import database
 from kcms.shared.database.migrate import apply_migrations
 
+logger = logging.getLogger("kcms")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,10 +19,16 @@ async def lifespan(app: FastAPI):
     try:
         await database.connect(settings.database_url)
         async with database.acquire() as connection:
-            await apply_migrations(connection)
-            await seed_if_empty(connection)
-    except Exception:
-        pass
+            applied = await apply_migrations(connection)
+            seeded = await seed_if_empty(connection)
+        logger.info("database ready (migrations=%s, seeded=%s)", applied, seeded)
+    except Exception as exc:
+        # Startup must not crash: /health reports DEGRADED instead. But the
+        # reason has to be visible, or a misconfigured DATABASE_URL is
+        # indistinguishable from a missing one.
+        logger.warning(
+            "database unavailable at startup: %s: %s", type(exc).__name__, exc
+        )
     yield
     await database.disconnect()
 
