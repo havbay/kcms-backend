@@ -18,6 +18,16 @@ class Database:
             await self._pool.close()
             self._pool = None
 
+    def acquire(self):
+        """Acquire a connection. Raises if the pool is not connected."""
+        if self._pool is None:
+            raise RuntimeError("database pool is not connected")
+        return self._pool.acquire()
+
+    @property
+    def connected(self) -> bool:
+        return self._pool is not None
+
     async def is_reachable(self) -> bool:
         """Probe PostgreSQL. Never leaks connection or exception detail."""
         if self._pool is None:
