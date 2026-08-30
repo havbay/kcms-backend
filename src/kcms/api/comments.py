@@ -10,6 +10,8 @@ from kcms.shared.database import database
 router = APIRouter(prefix="/api/v1")
 
 ActionKind = Literal["LEAVE", "HIDE", "UNHIDE"]
+SeverityLabel = Literal["SAFE", "OFFENSIVE", "HARMFUL"]
+TargetLabel = Literal["PERSON", "INSTITUTION", "NEITHER"]
 
 
 class WorkListItem(BaseModel):
@@ -28,6 +30,10 @@ class WorkListItem(BaseModel):
     latest_action: str | None
     latest_actor: str | None
     latest_action_at: datetime | None
+    corrected_severity: str | None
+    corrected_target: str | None
+    corrected_by: str | None
+    corrected_at: datetime | None
 
 
 class WorkList(BaseModel):
@@ -43,6 +49,22 @@ class ActionRequest(BaseModel):
 class HistoryEntry(BaseModel):
     kind: str
     actor: str
+    occurred_at: datetime
+
+
+class CorrectionRequest(BaseModel):
+    severity: SeverityLabel
+    target: TargetLabel
+    note: str | None = None
+    actor: str = "demo-client"
+
+
+class CorrectionResponse(BaseModel):
+    severity: str
+    target: str
+    actor: str
+    note: str | None
+    disagrees_with_model: str
     occurred_at: datetime
 
 
@@ -81,3 +103,30 @@ async def record_action(comment_id: str, body: ActionRequest) -> list[HistoryEnt
         await repository.record_action(connection, comment_id, body.kind, body.actor)
         history = await repository.fetch_history(connection, comment_id)
     return [HistoryEntry(**entry) for entry in history]
+
+
+@router.post(
+    "/comments/{comment_id}/corrections",
+    operation_id="recordCorrection",
+    response_model=CorrectionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_correction(comment_id: str, body: CorrectionRequest) -> CorrectionResponse:
+    """Records what a human asserts the labels should be.
+
+    A Correction is not an Action. Submitting one does not hide, unhide or
+    otherwise change what happens to the comment.
+    """
+    _require_database()
+    async with database.acquire() as connection:
+        exists = await connection.fetchval(
+            "SELECT 1 FROM comment_content WHERE comment_id = $1", comment_id
+        )
+        if not exists:
+            raise HTTPException(status_code=404, detail="comment not found")
+        created = await repository.record_correction(
+            connection, comment_id, body.severity, body.target, body.actor, body.note
+        )
+    if created is None:
+        raise HTTPException(status_code=500, detail="correction was not stored")
+    return CorrectionResponse(**created)

@@ -26,7 +26,11 @@ SELECT
     v.model_version,
     a.kind        AS latest_action,
     a.actor       AS latest_actor,
-    a.occurred_at AS latest_action_at
+    a.occurred_at AS latest_action_at,
+    k.severity    AS corrected_severity,
+    k.target      AS corrected_target,
+    k.actor       AS corrected_by,
+    k.occurred_at AS corrected_at
 FROM comment_content c
 LEFT JOIN LATERAL (
     SELECT * FROM verdict v2
@@ -38,6 +42,11 @@ LEFT JOIN LATERAL (
     WHERE a2.comment_id = c.comment_id
     ORDER BY a2.occurred_at DESC, a2.id DESC LIMIT 1
 ) a ON TRUE
+LEFT JOIN LATERAL (
+    SELECT * FROM correction k2
+    WHERE k2.comment_id = c.comment_id
+    ORDER BY k2.occurred_at DESC, k2.id DESC LIMIT 1
+) k ON TRUE
 WHERE c.page_id = $1
 ORDER BY
     -- unresolved first, then most severe, then oldest
@@ -103,3 +112,32 @@ async def fetch_history(connection: asyncpg.Connection, comment_id: str) -> list
         comment_id,
     )
     return [dict(row) for row in rows]
+
+
+async def record_correction(
+    connection: asyncpg.Connection,
+    comment_id: str,
+    severity: str,
+    target: str,
+    actor: str,
+    note: str | None,
+) -> dict[str, Any] | None:
+    """Append a Correction: what a human says the labels should be.
+
+    Deliberately writes NO Action. Disagreeing with a label is not a decision
+    about the comment, and conflating the two is how a moderation tool starts
+    manufacturing training labels nobody gave.
+    """
+    model_version = await connection.fetchval(
+        """SELECT model_version FROM verdict
+           WHERE comment_id = $1 ORDER BY occurred_at DESC, id DESC LIMIT 1""",
+        comment_id,
+    )
+    row = await connection.fetchrow(
+        """INSERT INTO correction
+           (comment_id, severity, target, disagrees_with_model, note, actor)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING severity, target, actor, note, disagrees_with_model, occurred_at""",
+        comment_id, severity, target, model_version or "unknown", note, actor,
+    )
+    return dict(row) if row else None

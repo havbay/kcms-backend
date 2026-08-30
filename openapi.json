@@ -24,6 +24,96 @@
         "title": "ActionRequest",
         "type": "object"
       },
+      "CorrectionRequest": {
+        "properties": {
+          "actor": {
+            "default": "demo-client",
+            "title": "Actor",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "severity": {
+            "enum": [
+              "SAFE",
+              "OFFENSIVE",
+              "HARMFUL"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "target": {
+            "enum": [
+              "PERSON",
+              "INSTITUTION",
+              "NEITHER"
+            ],
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "target"
+        ],
+        "title": "CorrectionRequest",
+        "type": "object"
+      },
+      "CorrectionResponse": {
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "disagrees_with_model": {
+            "title": "Disagrees With Model",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "target",
+          "actor",
+          "note",
+          "disagrees_with_model",
+          "occurred_at"
+        ],
+        "title": "CorrectionResponse",
+        "type": "object"
+      },
       "DatabaseStatus": {
         "enum": [
           "REACHABLE",
@@ -191,6 +281,51 @@
             "title": "Comment Id",
             "type": "string"
           },
+          "corrected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected At"
+          },
+          "corrected_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected By"
+          },
+          "corrected_severity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected Severity"
+          },
+          "corrected_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected Target"
+          },
           "latest_action": {
             "anyOf": [
               {
@@ -327,7 +462,11 @@
           "model_version",
           "latest_action",
           "latest_actor",
-          "latest_action_at"
+          "latest_action_at",
+          "corrected_severity",
+          "corrected_target",
+          "corrected_by",
+          "corrected_at"
         ],
         "title": "WorkListItem",
         "type": "object"
@@ -410,6 +549,56 @@
           }
         },
         "summary": "Record Action"
+      }
+    },
+    "/api/v1/comments/{comment_id}/corrections": {
+      "post": {
+        "description": "Records what a human asserts the labels should be.\n\nA Correction is not an Action. Submitting one does not hide, unhide or\notherwise change what happens to the comment.",
+        "operationId": "recordCorrection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "title": "Comment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorrectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Correction"
       }
     },
     "/api/v1/health": {
