@@ -122,5 +122,11 @@ Environment variable changes require a redeploy to take effect.
 
 ## Not yet built
 
-Authentication · Corrections · Request Access · real Facebook ingestion ·
-workspaces and team management · metrics · pagination · rate limiting.
+· Authentication 
+· Corrections 
+· Request Access 
+· Real Facebook ingestion 
+· Workspaces and team management 
+· Metrics 
+· Pagination 
+· Rate limiting.
