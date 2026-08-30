@@ -27,6 +27,7 @@ Migrations run and seed data is inserted automatically on startup.
 | `GET` | `/api/v1/health` | Database-aware health probe |
 | `GET` | `/api/v1/comments` | Moderation work list with verdicts |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
+| `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
 
 `GET /api/v1/health` returns `200 READY/REACHABLE`, or `503 DEGRADED/UNREACHABLE`
 when PostgreSQL cannot answer. It never returns exception or connection detail.
@@ -83,7 +84,7 @@ Three record kinds, never derived from one another.
 |---|---|
 | **Verdict** | What the model asserted |
 | **Action** | What happened to the comment (`HIDE`/`LEAVE`/`UNHIDE`) |
-| **Correction** | What a human explicitly asserts the labels should be *(not yet built)* |
+| **Correction** | What a human explicitly asserts the labels should be |
 
 **Hiding a comment writes no Correction.** If moderator actions became training
 labels, the model would drift toward suppression while the dashboard showed
@@ -123,7 +124,6 @@ Environment variable changes require a redeploy to take effect.
 ## Not yet built
 
 · Authentication 
-· Corrections 
 · Request Access 
 · Real Facebook ingestion 
 · Workspaces and team management 
