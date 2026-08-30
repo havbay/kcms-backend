@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: kcms-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run uvicorn kcms.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.3"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kcms-postgres
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://kcms-frontend.vercel.app,http://127.0.0.1:5173
+
+databases:
+  - name: kcms-postgres
+    plan: free

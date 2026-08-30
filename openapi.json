@@ -1,0 +1,89 @@
+{
+  "components": {
+    "schemas": {
+      "DatabaseStatus": {
+        "enum": [
+          "REACHABLE",
+          "UNREACHABLE"
+        ],
+        "title": "DatabaseStatus",
+        "type": "string"
+      },
+      "HealthResponse": {
+        "properties": {
+          "contract_version": {
+            "examples": [
+              "1.0.0"
+            ],
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DatabaseStatus"
+          },
+          "service": {
+            "examples": [
+              "kcms-backend"
+            ],
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceStatus"
+          }
+        },
+        "required": [
+          "service",
+          "status",
+          "database",
+          "contract_version"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "ServiceStatus": {
+        "enum": [
+          "READY",
+          "DEGRADED"
+        ],
+        "title": "ServiceStatus",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "title": "KCMS Backend",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Database unreachable"
+          }
+        },
+        "summary": "Database-aware service health"
+      }
+    }
+  }
+}
