@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from kcms.api.auth import current_user
 from kcms.moderation import repository
 from kcms.shared.database import database
 
@@ -43,7 +44,6 @@ class WorkList(BaseModel):
 
 class ActionRequest(BaseModel):
     kind: ActionKind
-    actor: str = "demo-client"
 
 
 class HistoryEntry(BaseModel):
@@ -56,7 +56,6 @@ class CorrectionRequest(BaseModel):
     severity: SeverityLabel
     target: TargetLabel
     note: str | None = None
-    actor: str = "demo-client"
 
 
 class CorrectionResponse(BaseModel):
@@ -77,7 +76,9 @@ def _require_database() -> None:
 
 
 @router.get("/comments", operation_id="listComments", response_model=WorkList)
-async def list_comments() -> WorkList:
+async def list_comments(
+    _: Annotated[dict[str, Any], Depends(current_user)],
+) -> WorkList:
     _require_database()
     async with database.acquire() as connection:
         rows = await repository.fetch_work_list(connection)
@@ -90,7 +91,11 @@ async def list_comments() -> WorkList:
     response_model=list[HistoryEntry],
     status_code=status.HTTP_201_CREATED,
 )
-async def record_action(comment_id: str, body: ActionRequest) -> list[HistoryEntry]:
+async def record_action(
+    comment_id: str,
+    body: ActionRequest,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> list[HistoryEntry]:
     """Records a moderation Action. Actions are append-only and reversible,
     and never become training labels."""
     _require_database()
@@ -100,7 +105,7 @@ async def record_action(comment_id: str, body: ActionRequest) -> list[HistoryEnt
         )
         if not exists:
             raise HTTPException(status_code=404, detail="comment not found")
-        await repository.record_action(connection, comment_id, body.kind, body.actor)
+        await repository.record_action(connection, comment_id, body.kind, user["display_name"])
         history = await repository.fetch_history(connection, comment_id)
     return [HistoryEntry(**entry) for entry in history]
 
@@ -111,7 +116,11 @@ async def record_action(comment_id: str, body: ActionRequest) -> list[HistoryEnt
     response_model=CorrectionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def record_correction(comment_id: str, body: CorrectionRequest) -> CorrectionResponse:
+async def record_correction(
+    comment_id: str,
+    body: CorrectionRequest,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> CorrectionResponse:
     """Records what a human asserts the labels should be.
 
     A Correction is not an Action. Submitting one does not hide, unhide or
@@ -125,7 +134,7 @@ async def record_correction(comment_id: str, body: CorrectionRequest) -> Correct
         if not exists:
             raise HTTPException(status_code=404, detail="comment not found")
         created = await repository.record_correction(
-            connection, comment_id, body.severity, body.target, body.actor, body.note
+            connection, comment_id, body.severity, body.target, user["display_name"], body.note
         )
     if created is None:
         raise HTTPException(status_code=500, detail="correction was not stored")

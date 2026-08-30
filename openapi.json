@@ -3,11 +3,6 @@
     "schemas": {
       "ActionRequest": {
         "properties": {
-          "actor": {
-            "default": "demo-client",
-            "title": "Actor",
-            "type": "string"
-          },
           "kind": {
             "enum": [
               "LEAVE",
@@ -24,13 +19,26 @@
         "title": "ActionRequest",
         "type": "object"
       },
-      "CorrectionRequest": {
+      "AuthUser": {
         "properties": {
-          "actor": {
-            "default": "demo-client",
-            "title": "Actor",
+          "display_name": {
+            "title": "Display Name",
             "type": "string"
           },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "title": "AuthUser",
+        "type": "object"
+      },
+      "CorrectionRequest": {
+        "properties": {
           "note": {
             "anyOf": [
               {
@@ -191,6 +199,36 @@
         "title": "HistoryEntry",
         "type": "object"
       },
+      "Providers": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "boolean"
+          },
+          "telegram": {
+            "title": "Telegram",
+            "type": "boolean"
+          },
+          "telegram_bot_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telegram Bot Username"
+          }
+        },
+        "required": [
+          "email",
+          "telegram",
+          "telegram_bot_username"
+        ],
+        "title": "Providers",
+        "type": "object"
+      },
       "ServiceStatus": {
         "enum": [
           "READY",
@@ -198,6 +236,87 @@
         ],
         "title": "ServiceStatus",
         "type": "string"
+      },
+      "Session": {
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUser"
+          }
+        },
+        "required": [
+          "token",
+          "user"
+        ],
+        "title": "Session",
+        "type": "object"
+      },
+      "SignInRequest": {
+        "properties": {
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignUpRequest": {
+        "properties": {
+          "display_name": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SignUpRequest",
+        "type": "object"
+      },
+      "TelegramRequest": {
+        "properties": {
+          "payload": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "title": "TelegramRequest",
+        "type": "object"
       },
       "ValidationError": {
         "properties": {
@@ -479,9 +598,244 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUser"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Current User"
+      }
+    },
+    "/api/v1/auth/providers": {
+      "get": {
+        "operationId": "listAuthProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Providers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Providers"
+      }
+    },
+    "/api/v1/auth/signin": {
+      "post": {
+        "operationId": "signIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign In"
+      }
+    },
+    "/api/v1/auth/signout": {
+      "post": {
+        "operationId": "signOut",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Out"
+      }
+    },
+    "/api/v1/auth/signup": {
+      "post": {
+        "operationId": "signUp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Up"
+      }
+    },
+    "/api/v1/auth/telegram": {
+      "post": {
+        "operationId": "signInWithTelegram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign In With Telegram"
+      }
+    },
     "/api/v1/comments": {
       "get": {
         "operationId": "listComments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -492,6 +846,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "List Comments"
@@ -509,6 +873,22 @@
             "schema": {
               "title": "Comment Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
@@ -563,6 +943,22 @@
             "schema": {
               "title": "Comment Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],
