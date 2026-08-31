@@ -65,7 +65,12 @@ async def workspace_for_user(
     row = await connection.fetchrow(
         """SELECT w.id, w.name, w.is_sandbox, m.role
            FROM membership m JOIN workspace w ON w.id = m.workspace_id
-           WHERE m.user_id = $1 ORDER BY m.created_at LIMIT 1""",
+           WHERE m.user_id = $1
+           -- A joined team workspace wins over the personal sandbox, so
+           -- accepting an invitation actually lands the person in that team.
+           ORDER BY (w.id = m.workspace_id AND m.role = 'owner' AND w.is_sandbox) ASC,
+                    m.created_at DESC
+           LIMIT 1""",
         user_id,
     )
     return dict(row) if row else None
