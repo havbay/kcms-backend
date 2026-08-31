@@ -132,3 +132,25 @@ async def remove_member(
             workspace_id, user_id,
         )
     return None
+
+
+async def rename_workspace(
+    connection: asyncpg.Connection, workspace_id: str, name: str
+) -> dict[str, Any] | None:
+    row = await connection.fetchrow(
+        "UPDATE workspace SET name = $2 WHERE id = $1 RETURNING id, name, is_sandbox",
+        workspace_id, name.strip(),
+    )
+    return dict(row) if row else None
+
+
+async def rename_user(
+    connection: asyncpg.Connection, user_id: str, display_name: str
+) -> str:
+    """A rename changes how future actions are attributed. It deliberately does
+    not rewrite the actor recorded on past actions: the audit trail records who
+    acted under the name they were using at the time."""
+    await connection.execute(
+        "UPDATE app_user SET display_name = $2 WHERE id = $1", user_id, display_name.strip()
+    )
+    return display_name.strip()
