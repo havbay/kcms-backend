@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from kcms.api import access_requests, auth, comments, health, settings_routes, team
+from kcms.api import access_requests, auth, comments, health, pilot_requests, settings_routes, team
 from kcms.settings import settings
 from kcms.shared.database import database
 from kcms.shared.database.migrate import apply_migrations
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(comments.router)
     app.include_router(access_requests.router)
+    app.include_router(pilot_requests.router)
     app.include_router(team.router)
     app.include_router(settings_routes.router)
     return app

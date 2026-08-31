@@ -16,6 +16,27 @@ class Settings(BaseSettings):
     # Comma-separated emails granted Platform Administration at sign-in. The
     # role is never settable through the API, so it cannot be self-assigned.
     platform_admin_emails: str = ""
+    public_frontend_url: str = "http://127.0.0.1:5173"
+    # Transactional email is optional. With any required value absent, the
+    # backend keeps onboarding functional through an audited manual-link path.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "KCMS"
+    smtp_timeout_seconds: int = 15
+
+    @property
+    def smtp_configured(self) -> bool:
+        return all(
+            (
+                self.smtp_host,
+                self.smtp_username,
+                self.smtp_password,
+                self.smtp_from_email,
+            )
+        )
 
     @property
     def platform_admin_email_set(self) -> set[str]:

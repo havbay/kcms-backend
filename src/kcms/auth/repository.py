@@ -109,6 +109,48 @@ async def sign_up_with_email(
     }
 
 
+async def register_invited_email(
+    connection: asyncpg.Connection,
+    email: str,
+    password: str,
+    display_name: str,
+    organization: str,
+) -> tuple[str, dict[str, Any]] | None:
+    """Create an account for a verified one-time onboarding invitation.
+
+    Unlike open sign-up this deliberately does not create a sandbox workspace;
+    the caller adds the person to the approved workspace in the same database
+    transaction.
+    """
+    email = email.strip().lower()
+    if await connection.fetchval(
+        "SELECT 1 FROM identity WHERE provider = 'email' AND provider_id = $1", email
+    ):
+        return None
+    user_id = uuid.uuid4().hex
+    name = display_name.strip() or email.split("@", 1)[0]
+    await connection.execute(
+        "INSERT INTO app_user (id, display_name, organization) VALUES ($1, $2, $3)",
+        user_id,
+        name,
+        organization.strip() or None,
+    )
+    await connection.execute(
+        """INSERT INTO identity (user_id, provider, provider_id, secret)
+           VALUES ($1, 'email', $2, $3)""",
+        user_id,
+        email,
+        hash_password(password),
+    )
+    token = await _issue_session(connection, user_id)
+    return token, {
+        "id": user_id,
+        "display_name": name,
+        "provider": "email",
+        "is_platform_admin": False,
+    }
+
+
 async def _sync_platform_admin(connection: asyncpg.Connection, user_id: str, email: str) -> bool:
     """Grant or revoke Platform Administration from the environment allowlist.
 

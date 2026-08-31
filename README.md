@@ -25,6 +25,11 @@ Migrations run and seed data is inserted automatically on startup.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/health` | Database-aware health probe |
+| `POST` | `/api/v1/pilot-requests` | Public pilot-access request; no account required |
+| `GET` | `/api/v1/admin/pilot-requests` | Platform Administrator pilot queue |
+| `POST` | `/api/v1/admin/pilot-requests/{id}/decision` | Approve or decline a pilot request |
+| `GET/POST` | `/api/v1/setup-invitations/{token}` | Preview and accept a one-time owner setup link |
+| `POST` | `/api/v1/auth/signup`, `/signin`, `/signout` | Email/password sessions |
 | `GET` | `/api/v1/comments` | Moderation work list with verdicts |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
 | `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
@@ -94,12 +99,58 @@ Storage splits along the erasure boundary: `comment_content` is purged when a
 commenter deletes at source; `verdict` and `action` are append-only and survive
 that purge. Deleting speech removes the speech; it does not falsify the audit trail.
 
+## Pilot onboarding
+
+```
+visitor submits request
+        │
+        ▼
+Platform Administrator reviews it
+        │ approved
+        ▼
+single-use setup link ──▶ client chooses their own password
+        │
+        ▼
+approved workspace owner signs in
+```
+
+The backend never creates or emails a password. New clients receive a random,
+seven-day, single-use setup URL and only its SHA-256 token hash is stored. If the
+email already belongs to a KCMS account, approval upgrades that existing
+workspace instead of creating a duplicate identity.
+
+Transactional email is optional. When SMTP is unavailable, the administrative
+response exposes the one-time setup URL to the Platform Administrator for manual
+sharing and records `MANUAL_REQUIRED` in `notification_delivery`.
+
+### SMTP configuration
+
+The implementation is provider-neutral SMTP. Recommended production values for
+Resend are:
+
+| Variable | Value |
+|---|---|
+| `PUBLIC_FRONTEND_URL` | `https://kcms-frontend.vercel.app` |
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USERNAME` | `resend` |
+| `SMTP_PASSWORD` | Resend API key; secret |
+| `SMTP_FROM_EMAIL` | A sender on the verified domain |
+| `SMTP_FROM_NAME` | `KCMS` |
+
+All four of host, username, password and sender email are required to enable
+delivery. With any one absent, startup remains healthy and onboarding uses the
+audited manual-link fallback.
+
 ## Layout
 
 ```
 migrations/          forward-only SQL, applied in filename order
 src/kcms/
 ├── api/             HTTP routing and transport schemas
+├── auth/            identities, password hashing and sessions
+├── pilot/           public requests and invitation acceptance
+├── notifications/   provider-neutral email contract and SMTP adapter
 ├── moderation/      classifier seam, pattern matcher, repository, seeds
 ├── shared/database/ asyncpg pool and migration runner
 └── app.py           application factory
@@ -114,7 +165,7 @@ Render (Singapore). Pushing to `main` auto-deploys.
 |---|---|
 | Build | `pip install uv && uv sync --frozen --no-dev` |
 | Start | `uv run uvicorn kcms.app:app --host 0.0.0.0 --port $PORT` |
-| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PYTHON_VERSION` |
+| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_FRONTEND_URL`, `PLATFORM_ADMIN_EMAILS`, optional SMTP variables |
 
 Environment variable changes require a redeploy to take effect.
 
@@ -123,10 +174,7 @@ Environment variable changes require a redeploy to take effect.
 
 ## Not yet built
 
-· Authentication 
-· Request Access 
-· Real Facebook ingestion 
-· Workspaces and team management 
-· Metrics 
-· Pagination 
-· Rate limiting.
+Real Facebook ingestion, a replaceable ingestion-source port, populated post and
+parent-comment context, a full moderation-history endpoint, fleet health and
+audit views for Platform Administration, metrics with meaningful denominators,
+and rate limiting.
