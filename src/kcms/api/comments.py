@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from kcms.api.auth import current_user
+from kcms.auth import repository as auth_repository
 from kcms.moderation import repository
 from kcms.shared.database import database
 
@@ -77,11 +78,11 @@ def _require_database() -> None:
 
 @router.get("/comments", operation_id="listComments", response_model=WorkList)
 async def list_comments(
-    _: Annotated[dict[str, Any], Depends(current_user)],
+    user: Annotated[dict[str, Any], Depends(current_user)],
 ) -> WorkList:
     _require_database()
     async with database.acquire() as connection:
-        rows = await repository.fetch_work_list(connection)
+        rows = await repository.fetch_work_list(connection, await _workspace_id(connection, user))
     return WorkList(items=[WorkListItem(**row) for row in rows], total=len(rows))
 
 
@@ -100,10 +101,10 @@ async def record_action(
     and never become training labels."""
     _require_database()
     async with database.acquire() as connection:
-        exists = await connection.fetchval(
-            "SELECT 1 FROM comment_content WHERE comment_id = $1", comment_id
-        )
-        if not exists:
+        workspace_id = await _workspace_id(connection, user)
+        # 404 rather than 403: a different status would confirm the comment
+        # exists in someone else's workspace.
+        if not await repository.comment_belongs_to(connection, comment_id, workspace_id):
             raise HTTPException(status_code=404, detail="comment not found")
         await repository.record_action(connection, comment_id, body.kind, user["display_name"])
         history = await repository.fetch_history(connection, comment_id)
@@ -128,10 +129,8 @@ async def record_correction(
     """
     _require_database()
     async with database.acquire() as connection:
-        exists = await connection.fetchval(
-            "SELECT 1 FROM comment_content WHERE comment_id = $1", comment_id
-        )
-        if not exists:
+        workspace_id = await _workspace_id(connection, user)
+        if not await repository.comment_belongs_to(connection, comment_id, workspace_id):
             raise HTTPException(status_code=404, detail="comment not found")
         created = await repository.record_correction(
             connection, comment_id, body.severity, body.target, user["display_name"], body.note
@@ -139,3 +138,10 @@ async def record_correction(
     if created is None:
         raise HTTPException(status_code=500, detail="correction was not stored")
     return CorrectionResponse(**created)
+
+
+async def _workspace_id(connection, user: dict[str, Any]) -> str:
+    workspace = await auth_repository.workspace_for_user(connection, user["id"])
+    if not workspace:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+    return workspace["id"]

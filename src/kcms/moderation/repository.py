@@ -47,7 +47,7 @@ LEFT JOIN LATERAL (
     WHERE k2.comment_id = c.comment_id
     ORDER BY k2.occurred_at DESC, k2.id DESC LIMIT 1
 ) k ON TRUE
-WHERE c.page_id = $1
+WHERE c.workspace_id = $1
 ORDER BY
     -- unresolved first, then most severe, then oldest
     (a.kind IS NOT NULL),
@@ -56,25 +56,32 @@ ORDER BY
 """
 
 
-async def seed_if_empty(connection: asyncpg.Connection) -> int:
-    """Classify and store the scripted comments once. Idempotent."""
+async def seed_workspace(connection: asyncpg.Connection, workspace_id: str) -> int:
+    """Give a new workspace its own copy of the sample comments.
+
+    Comment ids are prefixed with the workspace so they stay globally unique
+    without a composite key on every downstream table.
+    """
     existing = await connection.fetchval(
-        "SELECT COUNT(*) FROM comment_content WHERE page_id = $1", PAGE_ID
+        "SELECT COUNT(*) FROM comment_content WHERE workspace_id = $1", workspace_id
     )
     if existing:
         return 0
 
-    verdicts = await PatternMatcher().classify(
-        [CommentContext(comment_id=s.comment_id, text=s.text) for s in SEED_COMMENTS]
-    )
+    prefix = workspace_id[:8]
+    contexts = [
+        CommentContext(comment_id=f"{prefix}-{s.comment_id}", text=s.text) for s in SEED_COMMENTS
+    ]
+    verdicts = await PatternMatcher().classify(contexts)
 
     async with connection.transaction():
-        for seed, verdict in zip(SEED_COMMENTS, verdicts, strict=True):
+        for seed, context, verdict in zip(SEED_COMMENTS, contexts, verdicts, strict=True):
             await connection.execute(
                 """INSERT INTO comment_content
-                   (comment_id, page_id, author_ref, text, post_text, parent_text, is_reply)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7)""",
-                seed.comment_id, PAGE_ID, seed.author_ref, seed.text,
+                   (comment_id, page_id, workspace_id, author_ref, text,
+                    post_text, parent_text, is_reply)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                context.comment_id, PAGE_ID, workspace_id, seed.author_ref, seed.text,
                 seed.post_text, seed.parent_text, seed.is_reply,
             )
             await connection.execute(
@@ -82,15 +89,30 @@ async def seed_if_empty(connection: asyncpg.Connection) -> int:
                    (comment_id, severity, severity_confidence, target, target_confidence,
                     abstain, surfaced_reason, rationale, model_version)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-                seed.comment_id, verdict.severity.value, verdict.severity_confidence,
+                context.comment_id, verdict.severity.value, verdict.severity_confidence,
                 verdict.target.value, verdict.target_confidence, verdict.abstain,
                 verdict.surfaced_reason.value, verdict.rationale, verdict.model_version,
             )
     return len(SEED_COMMENTS)
 
 
-async def fetch_work_list(connection: asyncpg.Connection) -> list[dict[str, Any]]:
-    rows = await connection.fetch(WORK_LIST_SQL, PAGE_ID)
+async def comment_belongs_to(
+    connection: asyncpg.Connection, comment_id: str, workspace_id: str
+) -> bool:
+    """Authorization, not validation: without this a caller could act on another
+    workspace's comment by guessing its id."""
+    return bool(
+        await connection.fetchval(
+            "SELECT 1 FROM comment_content WHERE comment_id = $1 AND workspace_id = $2",
+            comment_id, workspace_id,
+        )
+    )
+
+
+async def fetch_work_list(
+    connection: asyncpg.Connection, workspace_id: str
+) -> list[dict[str, Any]]:
+    rows = await connection.fetch(WORK_LIST_SQL, workspace_id)
     return [dict(row) for row in rows]
 
 

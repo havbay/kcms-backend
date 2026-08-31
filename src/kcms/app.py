@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kcms.api import auth, comments, health
-from kcms.moderation.repository import seed_if_empty
 from kcms.settings import settings
 from kcms.shared.database import database
 from kcms.shared.database.migrate import apply_migrations
@@ -20,8 +19,7 @@ async def lifespan(app: FastAPI):
         await database.connect(settings.database_url)
         async with database.acquire() as connection:
             applied = await apply_migrations(connection)
-            seeded = await seed_if_empty(connection)
-        logger.info("database ready (migrations=%s, seeded=%s)", applied, seeded)
+        logger.info("database ready (migrations=%s)", applied)
     except Exception as exc:
         # Startup must not crash: /health reports DEGRADED instead. But the
         # reason has to be visible, or a misconfigured DATABASE_URL is

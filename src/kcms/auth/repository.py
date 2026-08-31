@@ -8,7 +8,13 @@ from typing import Any
 
 import asyncpg
 
-from kcms.auth.security import hash_password, hash_session_token, new_session_token, verify_password
+from kcms.auth.security import (
+    hash_password,
+    hash_session_token,
+    new_session_token,
+    verify_password,
+)
+from kcms.moderation.repository import seed_workspace
 
 SESSION_DAYS = 30
 
@@ -30,7 +36,38 @@ async def _create_user(
         "INSERT INTO app_user (id, display_name, organization) VALUES ($1, $2, $3)",
         user_id, display_name, organization or None,
     )
+    await _create_sandbox_workspace(connection, user_id, organization or display_name)
     return user_id
+
+
+async def _create_sandbox_workspace(
+    connection: asyncpg.Connection, user_id: str, name: str
+) -> str:
+    """Every account owns a workspace from the moment it exists, so no code
+    path has to cope with a user who belongs nowhere."""
+    workspace_id = uuid.uuid4().hex
+    await connection.execute(
+        "INSERT INTO workspace (id, name, is_sandbox) VALUES ($1, $2, TRUE)",
+        workspace_id, name.strip() or "My workspace",
+    )
+    await connection.execute(
+        "INSERT INTO membership (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
+        workspace_id, user_id,
+    )
+    await seed_workspace(connection, workspace_id)
+    return workspace_id
+
+
+async def workspace_for_user(
+    connection: asyncpg.Connection, user_id: str
+) -> dict[str, Any] | None:
+    row = await connection.fetchrow(
+        """SELECT w.id, w.name, w.is_sandbox, m.role
+           FROM membership m JOIN workspace w ON w.id = m.workspace_id
+           WHERE m.user_id = $1 ORDER BY m.created_at LIMIT 1""",
+        user_id,
+    )
+    return dict(row) if row else None
 
 
 async def sign_up_with_email(
