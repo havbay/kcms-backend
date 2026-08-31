@@ -204,3 +204,54 @@ async def test_a_decided_request_cannot_be_decided_again(client, admin):
 
     assert (await admin.post(url, json={"decision": "APPROVED"})).status_code == 200
     assert (await admin.post(url, json={"decision": "DECLINED", "reason": "x"})).status_code == 409
+
+
+async def test_the_admin_flag_is_reported_but_never_accepted_from_the_client(app, monkeypatch):
+    """The frontend needs to know whether to show administration navigation.
+    Reporting it must not create a way to claim it."""
+    email = f"admin-{uuid.uuid4().hex[:8]}@example.com"
+    monkeypatch.setattr(settings, "platform_admin_emails", email)
+    admin = await sign_up(app, email)
+    async with admin:
+        assert (await admin.get("/api/v1/auth/me")).json()["is_platform_admin"] is True
+
+    # An ordinary account cannot grant itself the role by asking for it.
+    ordinary = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    async with ordinary:
+        created = await ordinary.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": f"sneaky-{uuid.uuid4().hex[:8]}@example.com",
+                "password": "a-long-enough-password",
+                "display_name": "Sneaky",
+                "is_platform_admin": True,
+            },
+        )
+        assert created.status_code == 201
+        ordinary.headers["Authorization"] = f"Bearer {created.json()['token']}"
+        assert (await ordinary.get("/api/v1/auth/me")).json()["is_platform_admin"] is False
+        assert (await ordinary.get("/api/v1/admin/access-requests")).status_code == 403
+
+
+async def test_removing_an_email_from_the_allowlist_revokes_the_role(app, monkeypatch):
+    """Reconciled at sign-in, so revocation actually takes effect."""
+    email = f"temp-{uuid.uuid4().hex[:8]}@example.com"
+    monkeypatch.setattr(settings, "platform_admin_emails", email)
+    granted = await sign_up(app, email)
+    async with granted:
+        assert (await granted.get("/api/v1/auth/me")).json()["is_platform_admin"] is True
+
+    monkeypatch.setattr(settings, "platform_admin_emails", "")
+    revoked = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    async with revoked:
+        session = await revoked.post(
+            "/api/v1/auth/signin", json={"email": email, "password": "a-long-enough-password"}
+        )
+        assert session.status_code == 200
+        revoked.headers["Authorization"] = f"Bearer {session.json()['token']}"
+        assert (await revoked.get("/api/v1/auth/me")).json()["is_platform_admin"] is False
+        assert (await revoked.get("/api/v1/admin/access-requests")).status_code == 403

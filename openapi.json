@@ -262,6 +262,11 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "is_platform_admin": {
+            "default": false,
+            "title": "Is Platform Admin",
+            "type": "boolean"
           }
         },
         "required": [

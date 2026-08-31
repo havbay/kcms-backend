@@ -31,6 +31,9 @@ class TelegramRequest(BaseModel):
 class AuthUser(BaseModel):
     id: str
     display_name: str
+    # Lets the frontend decide whether to offer administration navigation.
+    # Authorization is still enforced per request; this is presentation only.
+    is_platform_admin: bool = False
 
 
 class Session(BaseModel):
@@ -42,6 +45,14 @@ class Providers(BaseModel):
     email: bool
     telegram: bool
     telegram_bot_username: str | None
+
+
+def _as_auth_user(user: dict[str, Any]) -> "AuthUser":
+    return AuthUser(
+        id=user["id"],
+        display_name=user["display_name"],
+        is_platform_admin=bool(user.get("is_platform_admin")),
+    )
 
 
 def _require_database() -> None:
@@ -86,7 +97,7 @@ async def sign_up(body: SignUpRequest) -> Session:
     if created is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "that email is already registered")
     token, user = created
-    return Session(token=token, user=AuthUser(id=user["id"], display_name=user["display_name"]))
+    return Session(token=token, user=_as_auth_user(user))
 
 
 @router.post("/signin", operation_id="signIn", response_model=Session)
@@ -98,7 +109,7 @@ async def sign_in(body: SignInRequest) -> Session:
         # One message for both causes: distinguishing them enumerates accounts.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "email or password is incorrect")
     token, user = found
-    return Session(token=token, user=AuthUser(id=user["id"], display_name=user["display_name"]))
+    return Session(token=token, user=_as_auth_user(user))
 
 
 @router.post("/telegram", operation_id="signInWithTelegram", response_model=Session)
@@ -116,12 +127,12 @@ async def sign_in_with_telegram(body: TelegramRequest) -> Session:
 
     async with database.acquire() as connection:
         token, user = await repository.sign_in_with_telegram(connection, telegram_id, display_name)
-    return Session(token=token, user=AuthUser(id=user["id"], display_name=user["display_name"]))
+    return Session(token=token, user=_as_auth_user(user))
 
 
 @router.get("/me", operation_id="getCurrentUser", response_model=AuthUser)
 async def get_current_user(user: Annotated[dict[str, Any], Depends(current_user)]) -> AuthUser:
-    return AuthUser(id=user["id"], display_name=user["display_name"])
+    return _as_auth_user(user)
 
 
 @router.post("/signout", operation_id="signOut", status_code=204)

@@ -89,14 +89,19 @@ async def sign_up_with_email(
         user_id = await _create_user(
             connection, display_name.strip() or email.split("@")[0], organization
         )
-        await _sync_platform_admin(connection, user_id, email)
+        is_admin = await _sync_platform_admin(connection, user_id, email)
         await connection.execute(
             """INSERT INTO identity (user_id, provider, provider_id, secret)
                VALUES ($1, 'email', $2, $3)""",
             user_id, email, hash_password(password),
         )
         token = await _issue_session(connection, user_id)
-    return token, {"id": user_id, "display_name": display_name, "provider": "email"}
+    return token, {
+        "id": user_id,
+        "display_name": display_name,
+        "provider": "email",
+        "is_platform_admin": is_admin,
+    }
 
 
 async def _sync_platform_admin(connection: asyncpg.Connection, user_id: str, email: str) -> bool:
@@ -125,9 +130,14 @@ async def sign_in_with_email(
     # an unknown email and a wrong password are not trivially distinguishable.
     if not row or not verify_password(password, row["secret"]):
         return None
-    await _sync_platform_admin(connection, row["id"], email)
+    is_admin = await _sync_platform_admin(connection, row["id"], email)
     token = await _issue_session(connection, row["id"])
-    return token, {"id": row["id"], "display_name": row["display_name"], "provider": "email"}
+    return token, {
+        "id": row["id"],
+        "display_name": row["display_name"],
+        "provider": "email",
+        "is_platform_admin": is_admin,
+    }
 
 
 async def sign_in_with_telegram(
