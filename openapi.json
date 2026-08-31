@@ -1,6 +1,136 @@
 {
   "components": {
     "schemas": {
+      "AccessRequest": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "monthly_comments": {
+            "title": "Monthly Comments",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team_size": {
+            "title": "Team Size",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "page_name",
+          "monthly_comments",
+          "team_size",
+          "note",
+          "status",
+          "decision_reason",
+          "decided_at",
+          "created_at"
+        ],
+        "title": "AccessRequest",
+        "type": "object"
+      },
+      "AccessRequestCreate": {
+        "properties": {
+          "monthly_comments": {
+            "enum": [
+              "UNDER_1K",
+              "1K_TO_10K",
+              "10K_TO_50K",
+              "OVER_50K"
+            ],
+            "title": "Monthly Comments",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "page_name": {
+            "maxLength": 200,
+            "minLength": 2,
+            "title": "Page Name",
+            "type": "string"
+          },
+          "team_size": {
+            "enum": [
+              "JUST_ME",
+              "2_TO_5",
+              "6_TO_20",
+              "OVER_20"
+            ],
+            "title": "Team Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_name",
+          "monthly_comments",
+          "team_size"
+        ],
+        "title": "AccessRequestCreate",
+        "type": "object"
+      },
       "ActionRequest": {
         "properties": {
           "kind": {
@@ -17,6 +147,110 @@
           "kind"
         ],
         "title": "ActionRequest",
+        "type": "object"
+      },
+      "AdminAccessRequest": {
+        "description": "Everything an administrator may see about a request.\n\nComment content is absent by construction. The product specification\nforbids Platform Administrators from browsing customer comments through\nordinary administration views, and a test asserts this shape holds.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "monthly_comments": {
+            "title": "Monthly Comments",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "requester_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requester Email"
+          },
+          "requester_name": {
+            "title": "Requester Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "team_size": {
+            "title": "Team Size",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "workspace_name": {
+            "title": "Workspace Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "page_name",
+          "monthly_comments",
+          "team_size",
+          "note",
+          "status",
+          "decision_reason",
+          "decided_at",
+          "created_at",
+          "workspace_name",
+          "requester_name",
+          "requester_email"
+        ],
+        "title": "AdminAccessRequest",
         "type": "object"
       },
       "AuthUser": {
@@ -129,6 +363,35 @@
         ],
         "title": "DatabaseStatus",
         "type": "string"
+      },
+      "Decision": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "APPROVED",
+              "DECLINED"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "Decision",
+        "type": "object"
       },
       "HTTPValidationError": {
         "properties": {
@@ -604,6 +867,252 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/access-requests": {
+      "post": {
+        "operationId": "createAccessRequest",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccessRequestCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Access Request"
+      }
+    },
+    "/api/v1/access-requests/mine": {
+      "get": {
+        "operationId": "getMyAccessRequest",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AccessRequest"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Getmyaccessrequest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Access Request"
+      }
+    },
+    "/api/v1/admin/access-requests": {
+      "get": {
+        "operationId": "listAccessRequests",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDING",
+                    "APPROVED",
+                    "DECLINED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminAccessRequest"
+                  },
+                  "title": "Response Listaccessrequests",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Access Requests"
+      }
+    },
+    "/api/v1/admin/access-requests/{request_id}/decision": {
+      "post": {
+        "operationId": "decideAccessRequest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessRequest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Access Request"
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "operationId": "getCurrentUser",

@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     # fail closed: an unconfigured provider is unavailable, never open.
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""
+    # Comma-separated emails granted Platform Administration at sign-in. The
+    # role is never settable through the API, so it cannot be self-assigned.
+    platform_admin_emails: str = ""
+
+    @property
+    def platform_admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in self.platform_admin_emails.split(",") if e.strip()}
 
     @property
     def cors_origin_list(self) -> list[str]:

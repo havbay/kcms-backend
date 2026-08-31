@@ -15,6 +15,7 @@ from kcms.auth.security import (
     verify_password,
 )
 from kcms.moderation.repository import seed_workspace
+from kcms.settings import settings
 
 SESSION_DAYS = 30
 
@@ -88,6 +89,7 @@ async def sign_up_with_email(
         user_id = await _create_user(
             connection, display_name.strip() or email.split("@")[0], organization
         )
+        await _sync_platform_admin(connection, user_id, email)
         await connection.execute(
             """INSERT INTO identity (user_id, provider, provider_id, secret)
                VALUES ($1, 'email', $2, $3)""",
@@ -95,6 +97,19 @@ async def sign_up_with_email(
         )
         token = await _issue_session(connection, user_id)
     return token, {"id": user_id, "display_name": display_name, "provider": "email"}
+
+
+async def _sync_platform_admin(connection: asyncpg.Connection, user_id: str, email: str) -> bool:
+    """Grant or revoke Platform Administration from the environment allowlist.
+
+    Reconciled on every sign-in so removing an address from the allowlist
+    actually takes the role away, rather than leaving it granted forever.
+    """
+    should_be_admin = email.strip().lower() in settings.platform_admin_email_set
+    await connection.execute(
+        "UPDATE app_user SET is_platform_admin = $2 WHERE id = $1", user_id, should_be_admin
+    )
+    return should_be_admin
 
 
 async def sign_in_with_email(
@@ -110,6 +125,7 @@ async def sign_in_with_email(
     # an unknown email and a wrong password are not trivially distinguishable.
     if not row or not verify_password(password, row["secret"]):
         return None
+    await _sync_platform_admin(connection, row["id"], email)
     token = await _issue_session(connection, row["id"])
     return token, {"id": row["id"], "display_name": row["display_name"], "provider": "email"}
 
@@ -144,7 +160,7 @@ async def sign_in_with_telegram(
 
 async def user_for_token(connection: asyncpg.Connection, token: str) -> dict[str, Any] | None:
     row = await connection.fetchrow(
-        """SELECT u.id, u.display_name FROM session s
+        """SELECT u.id, u.display_name, u.is_platform_admin FROM session s
            JOIN app_user u ON u.id = s.user_id
            WHERE s.token_hash = $1 AND s.expires_at > NOW()""",
         hash_session_token(token),
