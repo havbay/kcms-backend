@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from kcms.api.auth import current_user
@@ -41,6 +41,26 @@ class WorkListItem(BaseModel):
 class WorkList(BaseModel):
     items: list[WorkListItem]
     total: int
+    limit: int
+    offset: int
+
+
+class ReasonCount(BaseModel):
+    surfaced_reason: str
+    count: int
+
+
+class Summary(BaseModel):
+    """Counts computed across the whole workspace, not from one page."""
+
+    processed: int
+    need_review: int
+    reviewed: int
+    pending: int
+    left_visible: int
+    hidden: int
+    unhidden: int
+    reasons: list[ReasonCount]
 
 
 class ActionRequest(BaseModel):
@@ -79,11 +99,30 @@ def _require_database() -> None:
 @router.get("/comments", operation_id="listComments", response_model=WorkList)
 async def list_comments(
     user: Annotated[dict[str, Any], Depends(current_user)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> WorkList:
     _require_database()
     async with database.acquire() as connection:
-        rows = await repository.fetch_work_list(connection, await _workspace_id(connection, user))
-    return WorkList(items=[WorkListItem(**row) for row in rows], total=len(rows))
+        rows, total = await repository.fetch_work_list(
+            connection, await _workspace_id(connection, user), limit, offset
+        )
+    return WorkList(
+        items=[WorkListItem(**row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/comments/summary", operation_id="getWorkspaceSummary", response_model=Summary)
+async def get_summary(user: Annotated[dict[str, Any], Depends(current_user)]) -> Summary:
+    _require_database()
+    async with database.acquire() as connection:
+        summary = await repository.summarise_workspace(
+            connection, await _workspace_id(connection, user)
+        )
+    return Summary(**summary)
 
 
 @router.post(

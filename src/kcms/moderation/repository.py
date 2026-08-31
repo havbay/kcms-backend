@@ -52,7 +52,11 @@ ORDER BY
     -- unresolved first, then most severe, then oldest
     (a.kind IS NOT NULL),
     CASE v.severity WHEN 'HARMFUL' THEN 0 WHEN 'OFFENSIVE' THEN 1 ELSE 2 END,
-    c.posted_at
+    c.posted_at,
+    -- Deterministic tiebreaker. Without it, rows with equal sort keys come back
+    -- in arbitrary order and offset pages overlap or skip records.
+    c.comment_id
+LIMIT $2 OFFSET $3
 """
 
 
@@ -110,10 +114,78 @@ async def comment_belongs_to(
 
 
 async def fetch_work_list(
+    connection: asyncpg.Connection,
+    workspace_id: str,
+    limit: int = 25,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Returns (page, total). A Page under real load produces thousands of
+    comments; returning them all was only ever viable with seeded data."""
+    rows = await connection.fetch(WORK_LIST_SQL, workspace_id, limit, offset)
+    total = await connection.fetchval(
+        "SELECT COUNT(*) FROM comment_content WHERE workspace_id = $1", workspace_id
+    )
+    return [dict(row) for row in rows], total
+
+
+async def summarise_workspace(
     connection: asyncpg.Connection, workspace_id: str
-) -> list[dict[str, Any]]:
-    rows = await connection.fetch(WORK_LIST_SQL, workspace_id)
-    return [dict(row) for row in rows]
+) -> dict[str, Any]:
+    """Counts computed in the database rather than from a page of results.
+
+    The Overview previously derived its figures from whatever the work list
+    happened to return, which silently becomes wrong the moment that list is
+    paginated.
+    """
+    row = await connection.fetchrow(
+        """
+        WITH latest_verdict AS (
+            SELECT DISTINCT ON (comment_id) comment_id, surfaced_reason
+            FROM verdict ORDER BY comment_id, occurred_at DESC, id DESC
+        ),
+        latest_action AS (
+            SELECT DISTINCT ON (comment_id) comment_id, kind
+            FROM action ORDER BY comment_id, occurred_at DESC, id DESC
+        )
+        SELECT
+            COUNT(*) AS processed,
+            COUNT(*) FILTER (
+                WHERE v.surfaced_reason IS NOT NULL AND v.surfaced_reason <> 'cleared'
+            ) AS need_review,
+            COUNT(*) FILTER (WHERE a.kind IS NOT NULL) AS reviewed,
+            COUNT(*) FILTER (
+                WHERE v.surfaced_reason IS NOT NULL AND v.surfaced_reason <> 'cleared'
+                  AND a.kind IS NULL
+            ) AS pending,
+            COUNT(*) FILTER (WHERE a.kind = 'LEAVE') AS left_visible,
+            COUNT(*) FILTER (WHERE a.kind = 'HIDE') AS hidden,
+            COUNT(*) FILTER (WHERE a.kind = 'UNHIDE') AS unhidden
+        FROM comment_content c
+        LEFT JOIN latest_verdict v ON v.comment_id = c.comment_id
+        LEFT JOIN latest_action a ON a.comment_id = c.comment_id
+        WHERE c.workspace_id = $1
+        """,
+        workspace_id,
+    )
+    reasons = await connection.fetch(
+        """
+        WITH latest_verdict AS (
+            SELECT DISTINCT ON (v.comment_id) v.comment_id, v.surfaced_reason
+            FROM verdict v
+            JOIN comment_content c ON c.comment_id = v.comment_id
+            WHERE c.workspace_id = $1
+            ORDER BY v.comment_id, v.occurred_at DESC, v.id DESC
+        )
+        SELECT surfaced_reason, COUNT(*) AS count
+        FROM latest_verdict
+        WHERE surfaced_reason <> 'cleared'
+        GROUP BY surfaced_reason ORDER BY count DESC
+        """,
+        workspace_id,
+    )
+    summary = dict(row)
+    summary["reasons"] = [dict(r) for r in reasons]
+    return summary
 
 
 async def record_action(

@@ -182,3 +182,50 @@ async def test_each_account_gets_its_own_isolated_workspace():
         finally:
             await alice.aclose()
             await bob.aclose()
+
+
+async def test_the_work_list_is_paginated(client):
+    """A real Page produces thousands of comments; an unbounded list only ever
+    worked because the data was seeded."""
+    first = (await client.get("/api/v1/comments?limit=5&offset=0")).json()
+    assert len(first["items"]) == 5
+    assert first["total"] == 12
+    assert first["limit"] == 5 and first["offset"] == 0
+
+    second = (await client.get("/api/v1/comments?limit=5&offset=5")).json()
+    assert len(second["items"]) == 5
+    # Pages do not overlap.
+    assert {i["comment_id"] for i in first["items"]}.isdisjoint(
+        {i["comment_id"] for i in second["items"]}
+    )
+
+    last = (await client.get("/api/v1/comments?limit=5&offset=10")).json()
+    assert len(last["items"]) == 2
+
+
+async def test_an_absurd_page_size_is_rejected(client):
+    assert (await client.get("/api/v1/comments?limit=5000")).status_code == 422
+    assert (await client.get("/api/v1/comments?offset=-1")).status_code == 422
+
+
+async def test_the_summary_counts_the_workspace_not_the_current_page(client):
+    """The Overview previously derived its figures from whatever the work list
+    returned, which becomes wrong the moment that list is paginated."""
+    summary = (await client.get("/api/v1/comments/summary")).json()
+    page = (await client.get("/api/v1/comments?limit=3")).json()
+
+    assert len(page["items"]) == 3
+    assert summary["processed"] == 12
+    assert summary["need_review"] + 0 <= summary["processed"]
+    assert sum(r["count"] for r in summary["reasons"]) == summary["need_review"]
+
+
+async def test_the_summary_reflects_actions_taken(client):
+    comment_id = (await client.get("/api/v1/comments")).json()["items"][0]["comment_id"]
+    before = (await client.get("/api/v1/comments/summary")).json()
+
+    await client.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "HIDE"})
+
+    after = (await client.get("/api/v1/comments/summary")).json()
+    assert after["reviewed"] == before["reviewed"] + 1
+    assert after["hidden"] == before["hidden"] + 1

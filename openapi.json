@@ -649,6 +649,24 @@
         "title": "Providers",
         "type": "object"
       },
+      "ReasonCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "surfaced_reason": {
+            "title": "Surfaced Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surfaced_reason",
+          "count"
+        ],
+        "title": "ReasonCount",
+        "type": "object"
+      },
       "RenameSelf": {
         "properties": {
           "display_name": {
@@ -758,6 +776,58 @@
         "title": "SignUpRequest",
         "type": "object"
       },
+      "Summary": {
+        "description": "Counts computed across the whole workspace, not from one page.",
+        "properties": {
+          "hidden": {
+            "title": "Hidden",
+            "type": "integer"
+          },
+          "left_visible": {
+            "title": "Left Visible",
+            "type": "integer"
+          },
+          "need_review": {
+            "title": "Need Review",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonCount"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "integer"
+          },
+          "unhidden": {
+            "title": "Unhidden",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processed",
+          "need_review",
+          "reviewed",
+          "pending",
+          "left_visible",
+          "hidden",
+          "unhidden",
+          "reasons"
+        ],
+        "title": "Summary",
+        "type": "object"
+      },
       "Team": {
         "properties": {
           "invitations": {
@@ -862,6 +932,14 @@
             "title": "Items",
             "type": "array"
           },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
           "total": {
             "title": "Total",
             "type": "integer"
@@ -869,7 +947,9 @@
         },
         "required": [
           "items",
-          "total"
+          "total",
+          "limit",
+          "offset"
         ],
         "title": "WorkList",
         "type": "object"
@@ -1594,6 +1674,29 @@
         "operationId": "listComments",
         "parameters": [
           {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -1633,6 +1736,52 @@
           }
         },
         "summary": "List Comments"
+      }
+    },
+    "/api/v1/comments/summary": {
+      "get": {
+        "operationId": "getWorkspaceSummary",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Summary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Summary"
       }
     },
     "/api/v1/comments/{comment_id}/actions": {
