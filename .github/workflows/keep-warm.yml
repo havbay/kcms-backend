@@ -1,0 +1,39 @@
+# Render's free plan spins a service down after ~15 minutes idle, and the cold
+# start then takes 30-60 seconds. A visitor arriving in that window sees a
+# hang, not a product.
+#
+# Pinging /health every 10 minutes keeps the instance awake. Free tier allows
+# 750 instance-hours per month and staying warm costs about 730, so this only
+# works while kcms-backend is the workspace's only service.
+#
+# GitHub's scheduled runs are best-effort and can be delayed under load, so
+# treat this as reducing cold starts, not eliminating them.
+
+name: Keep backend warm
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping health endpoint
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 90 \
+              https://kcms-backend.onrender.com/api/v1/health || echo 000)
+            echo "attempt $attempt -> $code $(cat /tmp/body 2>/dev/null)"
+            # 503 means awake but the database is unreachable: still warm, and
+            # a real problem worth failing on rather than hiding.
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "::error::backend did not return 200 after 3 attempts"
+          exit 1
