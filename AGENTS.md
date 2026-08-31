@@ -14,5 +14,22 @@ backend regardless of frontend behavior. Update the backend-owned OpenAPI docume
 before the frontend depends on a contract change. Keep scripted local adapters
 separate from production integrations.
 
-Before ending, run the active part's backend and live integration gates and update
-the canonical backend and integration state files.
+## Before Ending Any Task
+
+Run the active part's backend and live integration gates, then **update the
+canonical state files in the same task**, before reporting back:
+
+- `../kcms-planning/agent-memory/backend-state.md` — endpoints, migrations,
+  environment variables, and operational behaviour that surprised you.
+- `../kcms-planning/agent-memory/integration-state.md` — when the OpenAPI
+  artifact or a cross-repository behaviour changed.
+- `../kcms-planning/agent-memory/next-actions.md` — when what comes next changed.
+
+Delete claims the task invalidated. A stale state file is worse than none,
+because the next person trusts it.
+
+Check gate results by exit code. Piping a command to `tail` reports the exit code
+of `tail`, so a failing suite can look green.
+
+Before believing a security guard works, delete it and confirm a test fails, then
+restore it. A passing test is not evidence that a behaviour is protected.
