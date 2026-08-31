@@ -212,8 +212,10 @@ async def test_the_admin_flag_is_reported_but_never_accepted_from_the_client(app
     email = f"admin-{uuid.uuid4().hex[:8]}@example.com"
     monkeypatch.setattr(settings, "platform_admin_emails", email)
     admin = await sign_up(app, email)
-    async with admin:
+    try:
         assert (await admin.get("/api/v1/auth/me")).json()["is_platform_admin"] is True
+    finally:
+        await admin.aclose()
 
     # An ordinary account cannot grant itself the role by asking for it.
     ordinary = httpx.AsyncClient(
@@ -240,8 +242,10 @@ async def test_removing_an_email_from_the_allowlist_revokes_the_role(app, monkey
     email = f"temp-{uuid.uuid4().hex[:8]}@example.com"
     monkeypatch.setattr(settings, "platform_admin_emails", email)
     granted = await sign_up(app, email)
-    async with granted:
+    try:
         assert (await granted.get("/api/v1/auth/me")).json()["is_platform_admin"] is True
+    finally:
+        await granted.aclose()
 
     monkeypatch.setattr(settings, "platform_admin_emails", "")
     revoked = httpx.AsyncClient(

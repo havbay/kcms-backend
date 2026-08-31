@@ -138,7 +138,7 @@ async def decide_access_request(
     # A decline the client cannot act on is a dead end, so a reason is required.
     if body.decision == "DECLINED" and not (body.reason or "").strip():
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "a reason is required when declining"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "a reason is required when declining"
         )
     _require_database()
     async with database.acquire() as connection:
