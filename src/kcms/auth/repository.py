@@ -22,16 +22,23 @@ async def _issue_session(connection: asyncpg.Connection, user_id: str) -> str:
     return token
 
 
-async def _create_user(connection: asyncpg.Connection, display_name: str) -> str:
+async def _create_user(
+    connection: asyncpg.Connection, display_name: str, organization: str | None = None
+) -> str:
     user_id = uuid.uuid4().hex
     await connection.execute(
-        "INSERT INTO app_user (id, display_name) VALUES ($1, $2)", user_id, display_name
+        "INSERT INTO app_user (id, display_name, organization) VALUES ($1, $2, $3)",
+        user_id, display_name, organization or None,
     )
     return user_id
 
 
 async def sign_up_with_email(
-    connection: asyncpg.Connection, email: str, password: str, display_name: str
+    connection: asyncpg.Connection,
+    email: str,
+    password: str,
+    display_name: str,
+    organization: str | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     """Returns (token, user), or None when the email is already registered."""
     email = email.strip().lower()
@@ -41,7 +48,9 @@ async def sign_up_with_email(
         )
         if taken:
             return None
-        user_id = await _create_user(connection, display_name.strip() or email.split("@")[0])
+        user_id = await _create_user(
+            connection, display_name.strip() or email.split("@")[0], organization
+        )
         await connection.execute(
             """INSERT INTO identity (user_id, provider, provider_id, secret)
                VALUES ($1, 'email', $2, $3)""",

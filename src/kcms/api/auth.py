@@ -15,6 +15,7 @@ class SignUpRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
     display_name: str = Field(default="", max_length=80)
+    organization: str = Field(default="", max_length=120)
 
 
 class SignInRequest(BaseModel):
@@ -80,7 +81,7 @@ async def sign_up(body: SignUpRequest) -> Session:
     _require_database()
     async with database.acquire() as connection:
         created = await repository.sign_up_with_email(
-            connection, str(body.email), body.password, body.display_name
+            connection, str(body.email), body.password, body.display_name, body.organization
         )
     if created is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "that email is already registered")

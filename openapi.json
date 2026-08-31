@@ -288,6 +288,12 @@
             "title": "Email",
             "type": "string"
           },
+          "organization": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Organization",
+            "type": "string"
+          },
           "password": {
             "maxLength": 200,
             "minLength": 8,
