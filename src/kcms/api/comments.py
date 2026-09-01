@@ -227,11 +227,10 @@ async def _provider_credential(
     """
     if kind not in ("HIDE", "UNHIDE"):
         return None
-    stored = await integrations_repository.credential_for_workspace(connection, workspace_id)
-    if not stored:
-        return None
     page_id = await repository.comment_page_id(connection, comment_id)
-    return stored if page_id == stored["external_page_id"] else None
+    if not page_id:
+        return None
+    return await integrations_repository.credential_for_page(connection, workspace_id, page_id)
 
 
 @router.post(

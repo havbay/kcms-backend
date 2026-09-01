@@ -137,7 +137,7 @@ async def test_sync_imports_page_comments_into_the_work_list(app, meta):
     ]
     client = await connected_client(app)
     try:
-        result = await client.post("/api/v1/facebook/sync")
+        result = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         assert result.status_code == 200, result.text
         assert result.json()["fetched"] == 2
         assert result.json()["imported"] == 2
@@ -157,7 +157,7 @@ async def test_resyncing_the_same_page_does_not_duplicate_or_reset_a_comment(app
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        first = await client.post("/api/v1/facebook/sync")
+        first = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         assert first.json()["imported"] == 1
 
         acted = await client.post(
@@ -165,7 +165,7 @@ async def test_resyncing_the_same_page_does_not_duplicate_or_reset_a_comment(app
         )
         assert acted.status_code == 201, acted.text
 
-        second = await client.post("/api/v1/facebook/sync")
+        second = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         assert second.status_code == 200
         # Fetched again, imported zero: the existing row is left alone.
         assert second.json()["fetched"] == 1
@@ -183,7 +183,7 @@ async def test_hiding_a_page_comment_is_applied_on_facebook(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
 
         hidden = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
         assert hidden.status_code == 201, hidden.text
@@ -200,7 +200,7 @@ async def test_leaving_a_comment_visible_never_calls_facebook(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         left = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "LEAVE"})
         assert left.status_code == 201
         assert meta.hidden == []
@@ -236,7 +236,7 @@ async def test_a_refused_facebook_hide_records_no_action(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         meta.refuse = True
 
         failed = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
@@ -266,7 +266,7 @@ async def test_sync_without_a_connected_page_is_refused(app, meta):
             },
         )
         client.headers["Authorization"] = f"Bearer {created.json()['token']}"
-        refused = await client.post("/api/v1/facebook/sync")
+        refused = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         assert refused.status_code == 409
     finally:
         await client.aclose()
@@ -275,7 +275,8 @@ async def test_sync_without_a_connected_page_is_refused(app, meta):
 async def test_sync_requires_authentication(app):
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
     try:
-        assert (await client.post("/api/v1/facebook/sync")).status_code == 401
+        response = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        assert response.status_code == 401
     finally:
         await client.aclose()
 
@@ -286,7 +287,7 @@ async def test_removing_samples_keeps_comments_imported_from_the_page(app, meta)
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
         async with database.acquire() as connection:
             stored = await connection.fetchval(
@@ -364,7 +365,7 @@ async def test_a_connected_workspace_lists_only_its_own_page(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
 
         listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
         assert [item["comment_id"] for item in listed["items"]] == ["fb-c-1"]
@@ -408,7 +409,7 @@ async def test_a_hide_that_reached_facebook_is_distinguishable_from_one_that_did
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
-        await client.post("/api/v1/facebook/sync")
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
 
         listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
