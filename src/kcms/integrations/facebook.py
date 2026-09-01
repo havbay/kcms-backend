@@ -35,7 +35,20 @@ class GraphMetaClient:
         self._scopes = scopes
         self._login_config_id = login_config_id
 
+    def _require_oauth(self) -> None:
+        """Facebook Login needs app credentials and a redirect target. Reading
+        and moderating comments with a Page token does not, so only the login
+        flow is refused when they are absent."""
+        if not all(
+            (self._app_id, self._app_secret, self._redirect_uri, self._login_config_id)
+        ):
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Facebook Login is not configured on this deployment",
+            )
+
     def authorization_url(self, state: str) -> str:
+        self._require_oauth()
         query = urlencode(
             {
                 "client_id": self._app_id,
@@ -74,6 +87,7 @@ class GraphMetaClient:
         )
 
     async def exchange_code(self, code: str) -> str:
+        self._require_oauth()
         body = await self._get(
             "oauth/access_token",
             {
@@ -196,15 +210,10 @@ class GraphMetaClient:
 
 
 def get_meta_client() -> MetaClient:
-    if not all(
-        (
-            settings.meta_graph_version,
-            settings.meta_app_id,
-            settings.meta_app_secret,
-            settings.meta_login_config_id,
-            settings.meta_oauth_redirect_uri,
-        )
-    ):
+    # Only the Graph version is required to talk to Meta at all. Connecting a
+    # Page with its own token, reading comments and hiding them need nothing
+    # more; Facebook Login additionally checks its own settings when used.
+    if not settings.meta_graph_version:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "Meta Graph API is not configured",
