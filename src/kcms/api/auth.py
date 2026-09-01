@@ -87,8 +87,16 @@ async def list_providers() -> Providers:
     )
 
 
-@router.post("/signup", operation_id="signUp", response_model=Session, status_code=201)
+@router.post(
+    "/signup",
+    operation_id="signUp",
+    response_model=Session,
+    status_code=201,
+    include_in_schema=False,
+)
 async def sign_up(body: SignUpRequest) -> Session:
+    if not settings.public_signup_enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
     _require_database()
     async with database.acquire() as connection:
         created = await repository.sign_up_with_email(

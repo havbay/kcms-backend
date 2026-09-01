@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://kcms:kcms@127.0.0.1:5432/kcms"
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     contract_version: str = "1.0.0"
+    # Client accounts are created through reviewed, one-time setup invitations.
+    # Tests may enable direct signup explicitly to create isolated fixtures.
+    public_signup_enabled: bool = False
     # Telegram sign-in stays disabled until a bot token is configured. It must
     # fail closed: an unconfigured provider is unavailable, never open.
     telegram_bot_token: str = ""

@@ -1323,39 +1323,6 @@
         "title": "SignInRequest",
         "type": "object"
       },
-      "SignUpRequest": {
-        "properties": {
-          "display_name": {
-            "default": "",
-            "maxLength": 80,
-            "title": "Display Name",
-            "type": "string"
-          },
-          "email": {
-            "format": "email",
-            "title": "Email",
-            "type": "string"
-          },
-          "organization": {
-            "default": "",
-            "maxLength": 120,
-            "title": "Organization",
-            "type": "string"
-          },
-          "password": {
-            "maxLength": 200,
-            "minLength": 8,
-            "title": "Password",
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ],
-        "title": "SignUpRequest",
-        "type": "object"
-      },
       "Summary": {
         "description": "Counts computed across the whole workspace, not from one page.",
         "properties": {
@@ -2358,44 +2325,6 @@
           }
         },
         "summary": "Sign Out"
-      }
-    },
-    "/api/v1/auth/signup": {
-      "post": {
-        "operationId": "signUp",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignUpRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Sign Up"
       }
     },
     "/api/v1/auth/telegram": {

@@ -29,13 +29,13 @@ Migrations run and seed data is inserted automatically on startup.
 | `GET` | `/api/v1/admin/pilot-requests` | Platform Administrator pilot queue |
 | `POST` | `/api/v1/admin/pilot-requests/{id}/decision` | Approve or decline a pilot request |
 | `GET/POST` | `/api/v1/setup-invitations/{token}` | Preview and accept a one-time owner setup link |
-| `POST` | `/api/v1/auth/signup`, `/signin`, `/signout` | Email/password sessions |
+| `POST` | `/api/v1/auth/signin`, `/signout` | Email/password sessions; account creation uses reviewed setup invitations |
 | `GET` | `/api/v1/comments` | Searchable, filterable, stably paginated work list with source context |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
 | `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
 | `GET/DELETE` | `/api/v1/facebook/connection` | Read or disconnect the workspace Page connection |
 | `POST` | `/api/v1/facebook/connections/manual` | Validate and connect an advanced Page access token |
-| `POST` | `/api/v1/facebook/oauth/start` | Begin Facebook authorization for an approved workspace |
+| `POST` | `/api/v1/facebook/oauth/start` | Begin Facebook authorization for an approved workspace or maintained demo admin |
 | `GET/POST` | `/api/v1/facebook/oauth/sessions/{state}` | List authorized Pages and confirm one Page |
 
 `GET /api/v1/health` returns `200 READY/REACHABLE`, or `503 DEGRADED/UNREACHABLE`
@@ -143,6 +143,12 @@ The manual path is advanced setup for development, troubleshooting, or assisted
 onboarding. Both paths expose the same KCMS capabilities when Meta grants the
 same Page tasks. Stored Page credentials are encrypted with Fernet and are never
 returned to the browser. Disconnect deletes the provider credential.
+
+The maintained Platform Admin demo account may also connect its own sandbox
+workspace so the team can prove the live Meta flow before onboarding a Client.
+Ordinary sandbox accounts remain blocked and must pass the reviewed approval
+flow; the demo exception is derived from the deployment admin allowlist and
+cannot be self-assigned.
 
 This slice implements authorization, validation, Page selection, secure storage,
 status, and disconnect. It has not yet been exercised against a live Meta app;

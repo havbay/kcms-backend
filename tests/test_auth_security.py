@@ -8,8 +8,10 @@ import hashlib
 import hmac
 import time
 
+import httpx
 import pytest
 
+from kcms.app import create_app
 from kcms.auth.security import (
     hash_password,
     new_session_token,
@@ -18,6 +20,25 @@ from kcms.auth.security import (
 )
 
 BOT_TOKEN = "123456:test-bot-token"
+
+
+async def test_public_email_signup_is_disabled_by_default(monkeypatch):
+    from kcms.settings import settings
+
+    monkeypatch.setattr(settings, "public_signup_enabled", False)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app()), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": "visitor@example.com",
+                "password": "a-long-enough-password",
+                "display_name": "Visitor",
+            },
+        )
+
+    assert response.status_code == 404
 
 
 def sign(payload: dict[str, str], token: str = BOT_TOKEN) -> dict[str, str]:
