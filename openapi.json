@@ -670,6 +670,21 @@
         "title": "JoinedWorkspace",
         "type": "object"
       },
+      "ManualPageConnection": {
+        "properties": {
+          "page_access_token": {
+            "maxLength": 4096,
+            "minLength": 20,
+            "title": "Page Access Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_access_token"
+        ],
+        "title": "ManualPageConnection",
+        "type": "object"
+      },
       "Member": {
         "properties": {
           "created_at": {
@@ -709,6 +724,221 @@
           "created_at"
         ],
         "title": "Member",
+        "type": "object"
+      },
+      "OAuthStart": {
+        "properties": {
+          "authorization_url": {
+            "title": "Authorization Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "title": "OAuthStart",
+        "type": "object"
+      },
+      "PageChoice": {
+        "properties": {
+          "can_moderate": {
+            "title": "Can Moderate",
+            "type": "boolean"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_id",
+          "page_name",
+          "tasks",
+          "can_moderate"
+        ],
+        "title": "PageChoice",
+        "type": "object"
+      },
+      "PageChoices": {
+        "properties": {
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageChoice"
+            },
+            "title": "Pages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pages"
+        ],
+        "title": "PageChoices",
+        "type": "object"
+      },
+      "PageConnection": {
+        "properties": {
+          "can_moderate": {
+            "title": "Can Moderate",
+            "type": "boolean"
+          },
+          "connected_at": {
+            "format": "date-time",
+            "title": "Connected At",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "method": {
+            "enum": [
+              "FACEBOOK_LOGIN",
+              "MANUAL_TOKEN"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "state": {
+            "const": "CONNECTED",
+            "default": "CONNECTED",
+            "title": "State",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_id",
+          "page_name",
+          "method",
+          "tasks",
+          "can_moderate",
+          "connected_at",
+          "last_synced_at"
+        ],
+        "title": "PageConnection",
+        "type": "object"
+      },
+      "PageConnectionState": {
+        "properties": {
+          "can_moderate": {
+            "default": false,
+            "title": "Can Moderate",
+            "type": "boolean"
+          },
+          "connected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FACEBOOK_LOGIN",
+                  "MANUAL_TOKEN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "page_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Id"
+          },
+          "page_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Name"
+          },
+          "state": {
+            "enum": [
+              "NOT_CONNECTED",
+              "CONNECTED"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "PageConnectionState",
         "type": "object"
       },
       "PilotDecision": {
@@ -984,6 +1214,21 @@
           "name"
         ],
         "title": "RenameWorkspace",
+        "type": "object"
+      },
+      "SelectPage": {
+        "properties": {
+          "page_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Page Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id"
+        ],
+        "title": "SelectPage",
         "type": "object"
       },
       "ServiceStatus": {
@@ -1355,6 +1600,10 @@
             ],
             "title": "Corrected Target"
           },
+          "is_reply": {
+            "title": "Is Reply",
+            "type": "boolean"
+          },
           "latest_action": {
             "anyOf": [
               {
@@ -1399,6 +1648,47 @@
               }
             ],
             "title": "Model Version"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "parent_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Text"
+          },
+          "post_kind": {
+            "title": "Post Kind",
+            "type": "string"
+          },
+          "post_permalink": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Permalink"
+          },
+          "post_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Text"
           },
           "posted_at": {
             "format": "date-time",
@@ -1481,6 +1771,12 @@
           "text",
           "author_ref",
           "posted_at",
+          "page_id",
+          "post_text",
+          "parent_text",
+          "is_reply",
+          "post_kind",
+          "post_permalink",
           "severity",
           "severity_confidence",
           "target",
@@ -2168,6 +2464,123 @@
             }
           },
           {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "SAFE",
+                    "OFFENSIVE",
+                    "HARMFUL"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PERSON",
+                    "INSTITUTION",
+                    "NEITHER"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surfaced_reason",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "triage",
+                    "institution_sample",
+                    "novel_language",
+                    "uncertainty",
+                    "cleared"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surfaced Reason"
+            }
+          },
+          {
+            "in": "query",
+            "name": "review_status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "PENDING",
+                    "ACTIONED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "PRIORITY",
+              "enum": [
+                "PRIORITY",
+                "NEWEST",
+                "OLDEST"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -2389,6 +2802,311 @@
           }
         },
         "summary": "Record Correction"
+      }
+    },
+    "/api/v1/facebook/connection": {
+      "delete": {
+        "operationId": "disconnectFacebookPage",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect"
+      },
+      "get": {
+        "operationId": "getFacebookConnection",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConnectionState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Connection"
+      }
+    },
+    "/api/v1/facebook/connections/manual": {
+      "post": {
+        "operationId": "connectFacebookPageManually",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualPageConnection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConnection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connect Manually"
+      }
+    },
+    "/api/v1/facebook/oauth/sessions/{state}": {
+      "get": {
+        "operationId": "listFacebookPageChoices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageChoices"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Page Choices"
+      }
+    },
+    "/api/v1/facebook/oauth/sessions/{state}/selection": {
+      "post": {
+        "operationId": "selectFacebookPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectPage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageConnection"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Select Page"
+      }
+    },
+    "/api/v1/facebook/oauth/start": {
+      "post": {
+        "operationId": "startFacebookAuthorization",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthStart"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Authorization"
       }
     },
     "/api/v1/health": {

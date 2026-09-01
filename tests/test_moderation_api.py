@@ -203,6 +203,48 @@ async def test_the_work_list_is_paginated(client):
     assert len(last["items"]) == 2
 
 
+async def test_work_list_exposes_source_post_and_reply_context(client):
+    items = (await client.get("/api/v1/comments?limit=100")).json()["items"]
+    assert items
+    assert all(item["post_text"] for item in items)
+    assert all(item["post_kind"] == "VIDEO" for item in items)
+    reply = next(item for item in items if item["is_reply"])
+    assert reply["parent_text"]
+
+
+async def test_work_list_filters_are_server_side_and_keep_filtered_totals(client):
+    harmful = (await client.get("/api/v1/comments?severity=HARMFUL&limit=2")).json()
+    assert harmful["items"]
+    assert len(harmful["items"]) <= 2
+    assert harmful["total"] >= len(harmful["items"])
+    assert all(item["severity"] == "HARMFUL" for item in harmful["items"])
+
+    institutions = (
+        await client.get("/api/v1/comments?target=INSTITUTION&surfaced_reason=institution_sample")
+    ).json()
+    assert institutions["items"]
+    assert all(item["target"] == "INSTITUTION" for item in institutions["items"])
+    assert all(
+        item["surfaced_reason"] == "institution_sample" for item in institutions["items"]
+    )
+
+    searched = (await client.get("/api/v1/comments?query=100%25")).json()
+    assert searched["total"] == 1
+    assert "100%" in searched["items"][0]["text"]
+
+
+async def test_work_list_can_filter_pending_and_actioned_comments(client):
+    comment_id = await first_comment_id(client)
+    await client.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "LEAVE"})
+
+    actioned = (await client.get("/api/v1/comments?review_status=ACTIONED")).json()
+    pending = (await client.get("/api/v1/comments?review_status=PENDING")).json()
+    assert actioned["total"] >= 1
+    assert all(item["latest_action"] is not None for item in actioned["items"])
+    assert all(item["latest_action"] is None for item in pending["items"])
+    assert actioned["total"] + pending["total"] == 12
+
+
 async def test_an_absurd_page_size_is_rejected(client):
     assert (await client.get("/api/v1/comments?limit=5000")).status_code == 422
     assert (await client.get("/api/v1/comments?offset=-1")).status_code == 422

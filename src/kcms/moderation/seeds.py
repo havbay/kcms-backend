@@ -18,9 +18,13 @@ class SeedComment:
     comment_id: str
     author_ref: str
     text: str
-    post_text: str | None = None
+    post_text: str | None = (
+        "វីដេអូថ្មី៖ សូមចែករំលែកមតិយោបល់របស់អ្នកអំពីសេវាកម្មរបស់យើង។"
+    )
     parent_text: str | None = None
     is_reply: bool = False
+    post_kind: str = "VIDEO"
+    post_permalink: str | None = None
 
 
 PAGE_ID = "demo-page"
@@ -32,7 +36,13 @@ SEED_COMMENTS: list[SeedComment] = [
     SeedComment("c-002", "user-b", "ធនាគារនេះសេវាអន់ណាស់ រង់ចាំយូរពេក។"),
     SeedComment("c-003", "user-c", "ក្រសួងនេះធ្វើការយឺត តម្លៃថ្លៃ គុណភាពមិនល្អ។"),
     # --- person-directed abuse: must reach a human ------------------------
-    SeedComment("c-004", "user-d", "អ្នកនេះល្ងង់ណាស់ កុំឱ្យវានិយាយ។"),
+    SeedComment(
+        "c-004",
+        "user-d",
+        "អ្នកនេះល្ងង់ណាស់ កុំឱ្យវានិយាយ។",
+        parent_text="តើអ្នកគិតយ៉ាងម៉េចអំពីមតិនេះ?",
+        is_reply=True,
+    ),
     SeedComment("c-005", "user-e", "បងនេះឆ្កួតហើយ គ្មានខួរសោះ។"),
     # --- scam / fraud -----------------------------------------------------
     SeedComment("c-006", "user-f", "គណនីនេះស្នើសុំលេខកូដ សូមប្រយ័ត្ន។"),

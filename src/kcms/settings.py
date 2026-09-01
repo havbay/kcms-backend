@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     smtp_from_email: str = ""
     smtp_from_name: str = "KCMS"
     smtp_timeout_seconds: int = 15
+    # Provider configuration. The Graph version is explicit because Meta API
+    # versions age out; an empty value keeps the integration unavailable rather
+    # than silently choosing a version at runtime.
+    meta_graph_version: str = ""
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+    meta_oauth_redirect_uri: str = ""
+    meta_oauth_scopes: str = (
+        "pages_show_list,pages_read_engagement,pages_manage_engagement"
+    )
+    integration_encryption_key: str = ""
 
     @property
     def smtp_configured(self) -> bool:

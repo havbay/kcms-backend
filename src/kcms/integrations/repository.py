@@ -1,0 +1,123 @@
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import asyncpg
+
+from kcms.integrations.contracts import ProviderPage
+
+
+async def upsert_page_connection(
+    connection: asyncpg.Connection,
+    *,
+    workspace_id: str,
+    user_id: str,
+    page: ProviderPage,
+    method: str,
+    credential_ciphertext: str,
+) -> dict[str, Any]:
+    row = await connection.fetchrow(
+        """INSERT INTO page_connection
+           (workspace_id, external_page_id, page_name, connection_method,
+            credential_ciphertext, tasks, connected_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (workspace_id) DO UPDATE SET
+             external_page_id = EXCLUDED.external_page_id,
+             page_name = EXCLUDED.page_name,
+             connection_method = EXCLUDED.connection_method,
+             credential_ciphertext = EXCLUDED.credential_ciphertext,
+             tasks = EXCLUDED.tasks,
+             connected_by = EXCLUDED.connected_by,
+             connected_at = NOW(),
+             last_synced_at = NULL,
+             updated_at = NOW()
+           RETURNING external_page_id AS page_id, page_name,
+                     connection_method AS method, tasks, connected_at,
+                     last_synced_at""",
+        workspace_id,
+        page.page_id,
+        page.page_name,
+        method,
+        credential_ciphertext,
+        list(page.tasks),
+        user_id,
+    )
+    return dict(row)
+
+
+async def get_page_connection(
+    connection: asyncpg.Connection, workspace_id: str
+) -> dict[str, Any] | None:
+    row = await connection.fetchrow(
+        """SELECT external_page_id AS page_id, page_name,
+                  connection_method AS method, tasks, connected_at,
+                  last_synced_at
+           FROM page_connection WHERE workspace_id = $1""",
+        workspace_id,
+    )
+    return dict(row) if row else None
+
+
+async def delete_page_connection(connection: asyncpg.Connection, workspace_id: str) -> bool:
+    result = await connection.execute(
+        "DELETE FROM page_connection WHERE workspace_id = $1", workspace_id
+    )
+    return result == "DELETE 1"
+
+
+async def create_oauth_attempt(
+    connection: asyncpg.Connection,
+    *,
+    state_hash: str,
+    workspace_id: str,
+    user_id: str,
+) -> None:
+    await connection.execute(
+        "DELETE FROM facebook_oauth_attempt WHERE expires_at <= NOW()"
+    )
+    await connection.execute(
+        """INSERT INTO facebook_oauth_attempt
+           (state_hash, workspace_id, user_id, expires_at)
+           VALUES ($1, $2, $3, $4)""",
+        state_hash,
+        workspace_id,
+        user_id,
+        datetime.now(UTC) + timedelta(minutes=10),
+    )
+
+
+async def oauth_attempt(
+    connection: asyncpg.Connection,
+    state_hash: str,
+    *,
+    workspace_id: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any] | None:
+    row = await connection.fetchrow(
+        """SELECT state_hash, workspace_id, user_id, candidate_ciphertext, expires_at
+           FROM facebook_oauth_attempt
+           WHERE state_hash = $1 AND expires_at > NOW()
+             AND ($2::TEXT IS NULL OR workspace_id = $2)
+             AND ($3::TEXT IS NULL OR user_id = $3)""",
+        state_hash,
+        workspace_id,
+        user_id,
+    )
+    return dict(row) if row else None
+
+
+async def store_oauth_candidates(
+    connection: asyncpg.Connection, state_hash: str, ciphertext: str
+) -> bool:
+    result = await connection.execute(
+        """UPDATE facebook_oauth_attempt SET candidate_ciphertext = $2
+           WHERE state_hash = $1 AND expires_at > NOW()""",
+        state_hash,
+        ciphertext,
+    )
+    return result == "UPDATE 1"
+
+
+async def delete_oauth_attempt(connection: asyncpg.Connection, state_hash: str) -> None:
+    await connection.execute(
+        "DELETE FROM facebook_oauth_attempt WHERE state_hash = $1", state_hash
+    )

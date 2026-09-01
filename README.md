@@ -30,9 +30,13 @@ Migrations run and seed data is inserted automatically on startup.
 | `POST` | `/api/v1/admin/pilot-requests/{id}/decision` | Approve or decline a pilot request |
 | `GET/POST` | `/api/v1/setup-invitations/{token}` | Preview and accept a one-time owner setup link |
 | `POST` | `/api/v1/auth/signup`, `/signin`, `/signout` | Email/password sessions |
-| `GET` | `/api/v1/comments` | Moderation work list with verdicts |
+| `GET` | `/api/v1/comments` | Searchable, filterable, stably paginated work list with source context |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
 | `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
+| `GET/DELETE` | `/api/v1/facebook/connection` | Read or disconnect the workspace Page connection |
+| `POST` | `/api/v1/facebook/connections/manual` | Validate and connect an advanced Page access token |
+| `POST` | `/api/v1/facebook/oauth/start` | Begin Facebook authorization for an approved workspace |
+| `GET/POST` | `/api/v1/facebook/oauth/sessions/{state}` | List authorized Pages and confirm one Page |
 
 `GET /api/v1/health` returns `200 READY/REACHABLE`, or `503 DEGRADED/UNREACHABLE`
 when PostgreSQL cannot answer. It never returns exception or connection detail.
@@ -123,6 +127,27 @@ Transactional email is optional. When SMTP is unavailable, the administrative
 response exposes the one-time setup URL to the Platform Administrator for manual
 sharing and records `MANUAL_REQUIRED` in `notification_delivery`.
 
+## Facebook Page connection
+
+Approved Client workspaces have two credential-acquisition paths:
+
+```text
+Continue with Facebook -> choose authorized Page -> confirm
+Connect with Page token -> validate Page identity and tasks
+                                    |
+                                    v
+                   one encrypted Page Connection record
+```
+
+The manual path is advanced setup for development, troubleshooting, or assisted
+onboarding. Both paths expose the same KCMS capabilities when Meta grants the
+same Page tasks. Stored Page credentials are encrypted with Fernet and are never
+returned to the browser. Disconnect deletes the provider credential.
+
+This slice implements authorization, validation, Page selection, secure storage,
+status, and disconnect. It has not yet been exercised against a live Meta app;
+comment synchronization and provider-side hide/unhide remain external work.
+
 ### SMTP configuration
 
 The implementation is provider-neutral SMTP. Recommended production values for
@@ -151,6 +176,7 @@ src/kcms/
 ├── auth/            identities, password hashing and sessions
 ├── pilot/           public requests and invitation acceptance
 ├── notifications/   provider-neutral email contract and SMTP adapter
+├── integrations/    provider ports, Meta authorization and encrypted credentials
 ├── moderation/      classifier seam, pattern matcher, repository, seeds
 ├── shared/database/ asyncpg pool and migration runner
 └── app.py           application factory
@@ -165,7 +191,7 @@ Render (Singapore). Pushing to `main` auto-deploys.
 |---|---|
 | Build | `pip install uv && uv sync --frozen --no-dev` |
 | Start | `uv run uvicorn kcms.app:app --host 0.0.0.0 --port $PORT` |
-| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_FRONTEND_URL`, `PLATFORM_ADMIN_EMAILS`, optional SMTP variables |
+| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_FRONTEND_URL`, `PLATFORM_ADMIN_EMAILS`, optional SMTP and Meta variables |
 
 Environment variable changes require a redeploy to take effect.
 
@@ -174,7 +200,16 @@ Environment variable changes require a redeploy to take effect.
 
 ## Not yet built
 
-Real Facebook ingestion, a replaceable ingestion-source port, populated post and
-parent-comment context, a full moderation-history endpoint, fleet health and
-audit views for Platform Administration, metrics with meaningful denominators,
-and rate limiting.
+Live Facebook verification, comment synchronization, provider-side hide/unhide,
+a full moderation-history endpoint, fleet health and audit views for Platform
+Administration, metrics with meaningful denominators, and rate limiting.
+
+### Meta configuration
+
+| Variable | Purpose |
+|---|---|
+| `META_GRAPH_VERSION` | Explicit supported Graph API version, for example `vXX.X` |
+| `META_APP_ID` / `META_APP_SECRET` | KCMS Meta application credentials |
+| `META_OAUTH_REDIRECT_URI` | Backend OAuth callback URL |
+| `META_OAUTH_SCOPES` | Comma-separated Page permissions requested during authorization |
+| `INTEGRATION_ENCRYPTION_KEY` | Fernet key used only for provider credentials |

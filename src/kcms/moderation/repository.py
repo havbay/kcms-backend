@@ -10,12 +10,18 @@ from kcms.moderation.contracts import CommentContext
 from kcms.moderation.pattern_matcher import PatternMatcher
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 
-WORK_LIST_SQL = """
+WORK_LIST_SELECT = """
 SELECT
     c.comment_id,
     c.text,
     c.author_ref,
     c.posted_at,
+    c.page_id,
+    c.post_text,
+    c.parent_text,
+    c.is_reply,
+    c.post_kind,
+    c.post_permalink,
     v.severity,
     v.severity_confidence,
     v.target,
@@ -31,6 +37,9 @@ SELECT
     k.target      AS corrected_target,
     k.actor       AS corrected_by,
     k.occurred_at AS corrected_at
+"""
+
+WORK_LIST_FROM = """
 FROM comment_content c
 LEFT JOIN LATERAL (
     SELECT * FROM verdict v2
@@ -47,16 +56,6 @@ LEFT JOIN LATERAL (
     WHERE k2.comment_id = c.comment_id
     ORDER BY k2.occurred_at DESC, k2.id DESC LIMIT 1
 ) k ON TRUE
-WHERE c.workspace_id = $1
-ORDER BY
-    -- unresolved first, then most severe, then oldest
-    (a.kind IS NOT NULL),
-    CASE v.severity WHEN 'HARMFUL' THEN 0 WHEN 'OFFENSIVE' THEN 1 ELSE 2 END,
-    c.posted_at,
-    -- Deterministic tiebreaker. Without it, rows with equal sort keys come back
-    -- in arbitrary order and offset pages overlap or skip records.
-    c.comment_id
-LIMIT $2 OFFSET $3
 """
 
 
@@ -83,10 +82,11 @@ async def seed_workspace(connection: asyncpg.Connection, workspace_id: str) -> i
             await connection.execute(
                 """INSERT INTO comment_content
                    (comment_id, page_id, workspace_id, author_ref, text,
-                    post_text, parent_text, is_reply)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                    post_text, parent_text, is_reply, post_kind, post_permalink)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)""",
                 context.comment_id, PAGE_ID, workspace_id, seed.author_ref, seed.text,
                 seed.post_text, seed.parent_text, seed.is_reply,
+                seed.post_kind, seed.post_permalink,
             )
             await connection.execute(
                 """INSERT INTO verdict
@@ -118,13 +118,51 @@ async def fetch_work_list(
     workspace_id: str,
     limit: int = 25,
     offset: int = 0,
+    query: str | None = None,
+    severity: str | None = None,
+    target: str | None = None,
+    surfaced_reason: str | None = None,
+    review_status: str | None = None,
+    sort: str = "PRIORITY",
 ) -> tuple[list[dict[str, Any]], int]:
     """Returns (page, total). A Page under real load produces thousands of
     comments; returning them all was only ever viable with seeded data."""
-    rows = await connection.fetch(WORK_LIST_SQL, workspace_id, limit, offset)
-    total = await connection.fetchval(
-        "SELECT COUNT(*) FROM comment_content WHERE workspace_id = $1", workspace_id
+    values: list[Any] = [workspace_id]
+    conditions = ["c.workspace_id = $1"]
+
+    def add(value: Any, sql: str) -> None:
+        values.append(value)
+        conditions.append(sql.replace("$?", f"${len(values)}"))
+
+    if query:
+        add(query.strip(), "(c.text ILIKE '%' || $? || '%' OR c.post_text ILIKE '%' || $? || '%')")
+    if severity:
+        add(severity, "v.severity = $?")
+    if target:
+        add(target, "v.target = $?")
+    if surfaced_reason:
+        add(surfaced_reason, "v.surfaced_reason = $?")
+    if review_status == "PENDING":
+        conditions.append("a.kind IS NULL")
+    elif review_status == "ACTIONED":
+        conditions.append("a.kind IS NOT NULL")
+
+    where = " WHERE " + " AND ".join(conditions)
+    order = {
+        "NEWEST": "c.posted_at DESC, c.comment_id",
+        "OLDEST": "c.posted_at, c.comment_id",
+        "PRIORITY": """(a.kind IS NOT NULL),
+            CASE v.severity WHEN 'HARMFUL' THEN 0 WHEN 'OFFENSIVE' THEN 1 ELSE 2 END,
+            c.posted_at, c.comment_id""",
+    }[sort]
+    count_sql = "SELECT COUNT(*) " + WORK_LIST_FROM + where
+    total = await connection.fetchval(count_sql, *values)
+    values.extend([limit, offset])
+    page_sql = (
+        WORK_LIST_SELECT + WORK_LIST_FROM + where + f" ORDER BY {order} "
+        f"LIMIT ${len(values) - 1} OFFSET ${len(values)}"
     )
+    rows = await connection.fetch(page_sql, *values)
     return [dict(row) for row in rows], total
 
 

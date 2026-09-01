@@ -21,6 +21,12 @@ class WorkListItem(BaseModel):
     text: str
     author_ref: str
     posted_at: datetime
+    page_id: str
+    post_text: str | None
+    parent_text: str | None
+    is_reply: bool
+    post_kind: str
+    post_permalink: str | None
     severity: str | None
     severity_confidence: float | None
     target: str | None
@@ -101,11 +107,30 @@ async def list_comments(
     user: Annotated[dict[str, Any], Depends(current_user)],
     limit: Annotated[int, Query(ge=1, le=100)] = 25,
     offset: Annotated[int, Query(ge=0)] = 0,
+    query: Annotated[str | None, Query(max_length=200)] = None,
+    severity: Annotated[SeverityLabel | None, Query()] = None,
+    target: Annotated[TargetLabel | None, Query()] = None,
+    surfaced_reason: Annotated[
+        Literal["triage", "institution_sample", "novel_language", "uncertainty", "cleared"]
+        | None,
+        Query(),
+    ] = None,
+    review_status: Annotated[Literal["PENDING", "ACTIONED"] | None, Query()] = None,
+    sort: Annotated[Literal["PRIORITY", "NEWEST", "OLDEST"], Query()] = "PRIORITY",
 ) -> WorkList:
     _require_database()
     async with database.acquire() as connection:
         rows, total = await repository.fetch_work_list(
-            connection, await _workspace_id(connection, user), limit, offset
+            connection,
+            await _workspace_id(connection, user),
+            limit,
+            offset,
+            query=query,
+            severity=severity,
+            target=target,
+            surfaced_reason=surfaced_reason,
+            review_status=review_status,
+            sort=sort,
         )
     return WorkList(
         items=[WorkListItem(**row) for row in rows],
