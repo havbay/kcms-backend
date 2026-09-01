@@ -135,3 +135,55 @@ def test_bare_page_tasks_count_as_moderation_capability():
         page_id="page-2", page_name="Other", access_token="t", tasks=("ANALYZE",)
     )
     assert without.can_moderate is False
+
+
+async def test_sync_names_the_missing_read_permission(monkeypatch):
+    """/feed answers {"data": []} rather than an error when the token lacks
+    pages_read_engagement. Without this check an unusable connection reports
+    "no new comments" forever and never says why."""
+    client = _graph_client()
+
+    async def fake_get(path, params):
+        if path == "debug_token":
+            return {"data": {"scopes": ["pages_manage_engagement", "pages_show_list"]}}
+        raise AssertionError("the feed must not be read without the permission")
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    with pytest.raises(ValueError) as refused:
+        await client.fetch_comments("page-1", "page-token")
+    assert "pages_read_engagement" in str(refused.value)
+
+
+async def test_sync_reads_the_feed_once_the_permission_is_granted(monkeypatch):
+    client = _graph_client()
+
+    async def fake_get(path, params):
+        if path == "debug_token":
+            return {"data": {"scopes": ["pages_read_engagement"]}}
+        return {
+            "data": [
+                {
+                    "id": "post-1",
+                    "message": "តើសេវាកម្មយើងយ៉ាងណា?",
+                    "permalink_url": "https://facebook.com/p/1",
+                    "comments": {
+                        "data": [
+                            {
+                                "id": "c-1",
+                                "message": "សេវាកម្មនេះយឺតណាស់",
+                                "created_time": "2026-09-01T10:00:00+0000",
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    comments = await client.fetch_comments("page-1", "page-token")
+    assert [c.comment_id for c in comments] == ["c-1"]
+    assert comments[0].post_text == "តើសេវាកម្មយើងយ៉ាងណា?"
+    # Meta withholds `from` for commenters who have not authorized the app.
+    assert comments[0].author_ref == "fb:c-1"

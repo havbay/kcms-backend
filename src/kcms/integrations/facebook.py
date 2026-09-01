@@ -201,6 +201,21 @@ class GraphMetaClient:
         the app - the ordinary case on a real Page - so the author falls back to
         the comment id rather than being invented.
         """
+        # /feed answers {"data": []} rather than an error when the token lacks
+        # pages_read_engagement, so an unusable connection would look like a
+        # quiet Page forever. Check the granted scopes and say so instead.
+        debug = await self._get(
+            "debug_token", {"input_token": token, "access_token": token}
+        )
+        scopes = (debug.get("data") or {}).get("scopes") or []
+        if "pages_read_engagement" not in scopes:
+            raise ValueError(
+                "This Page token is missing the pages_read_engagement "
+                "permission, so Facebook returns no posts or comments. Add it "
+                "in Graph API Explorer, generate the Page token again, and "
+                "reconnect the Page."
+            )
+
         body = await self._get(
             f"{page_id}/feed",
             {
