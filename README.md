@@ -185,7 +185,9 @@ openapi.json         contract artifact — a test asserts byte equality
 
 ## Deployment
 
-Render (Singapore). Pushing to `main` auto-deploys.
+Render (Singapore). The service watches `main`, but its GitHub webhook currently
+does not fire reliably; verify the commit and trigger one manual deploy when a
+push produces no deployment.
 
 | | |
 |---|---|
