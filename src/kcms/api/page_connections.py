@@ -82,16 +82,6 @@ async def _workspace(connection, user: dict[str, Any]) -> dict[str, Any]:
     return workspace
 
 
-def _require_connection_access(workspace: dict[str, Any], user: dict[str, Any]) -> None:
-    """Keep customer sandboxes closed while allowing the maintained demo account.
-
-    Platform Administration is assigned only from the deployment allowlist, so
-    this exception cannot be self-granted by a Client account.
-    """
-    if workspace["is_sandbox"] and not user.get("is_platform_admin"):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Page connection is not approved")
-
-
 @router.get(
     "/connection", operation_id="getFacebookConnection", response_model=PageConnectionState
 )
@@ -120,7 +110,6 @@ async def connect_manually(
 ) -> PageConnection:
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
-        _require_connection_access(workspace, user)
     try:
         page = await meta.validate_page_token(body.page_access_token)
     except ValueError as exc:
@@ -151,7 +140,6 @@ async def start_authorization(
     state = secrets.token_urlsafe(32)
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
-        _require_connection_access(workspace, user)
         await repository.create_oauth_attempt(
             connection,
             state_hash=hash_session_token(state),

@@ -77,6 +77,15 @@ async def current_user(
     return user
 
 
+async def require_platform_admin(
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> dict[str, Any]:
+    """Require the deployment-managed Platform Administrator capability."""
+    if not user.get("is_platform_admin"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "platform administration required")
+    return user
+
+
 @router.get("/providers", operation_id="listAuthProviders", response_model=Providers)
 async def list_providers() -> Providers:
     enabled = bool(settings.telegram_bot_token and settings.telegram_bot_username)

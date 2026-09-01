@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kcms.api import (
-    access_requests,
     auth,
     comments,
     health,
@@ -58,7 +57,6 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(comments.router)
     app.include_router(page_connections.router)
-    app.include_router(access_requests.router)
     app.include_router(pilot_requests.router)
     app.include_router(team.router)
     app.include_router(settings_routes.router)

@@ -21,3 +21,12 @@ def test_public_signup_is_not_advertised_in_the_contract():
 
     schema = json.loads(render_artifact())
     assert "/api/v1/auth/signup" not in schema["paths"]
+
+
+def test_contract_has_no_second_page_connection_approval_flow():
+    import json
+
+    paths = json.loads(render_artifact())["paths"]
+    assert "/api/v1/access-requests" not in paths
+    assert "/api/v1/access-requests/mine" not in paths
+    assert "/api/v1/admin/access-requests" not in paths

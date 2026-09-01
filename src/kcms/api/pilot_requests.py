@@ -4,8 +4,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 
-from kcms.api.access_requests import require_platform_admin
-from kcms.api.auth import Session, _as_auth_user
+from kcms.api.auth import Session, _as_auth_user, require_platform_admin
 from kcms.notifications.contracts import Notification, NotificationSender
 from kcms.notifications.smtp import DisabledNotificationSender, SmtpNotificationSender
 from kcms.pilot import repository

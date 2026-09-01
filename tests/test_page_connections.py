@@ -9,7 +9,6 @@ from kcms.app import create_app
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import get_credential_cipher
 from kcms.integrations.facebook import GraphMetaClient, get_meta_client
-from kcms.settings import settings
 from kcms.shared.database import database
 
 
@@ -148,7 +147,7 @@ async def test_connection_status_and_disconnect_never_return_the_credential(app)
         await client.aclose()
 
 
-async def test_invalid_token_and_unapproved_workspace_are_rejected(app):
+async def test_invalid_token_is_rejected_and_a_client_sandbox_can_start_facebook(app):
     approved = await approved_client(app)
     sandbox = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
@@ -169,46 +168,14 @@ async def test_invalid_token_and_unapproved_workspace_are_rejected(app):
             },
         )
         sandbox.headers["Authorization"] = f"Bearer {created.json()['token']}"
-        denied = await sandbox.post(
-            "/api/v1/facebook/connections/manual",
-            json={"page_access_token": "valid-page-token-for-test"},
-        )
-        assert denied.status_code == 403
-    finally:
-        await approved.aclose()
-        await sandbox.aclose()
-
-
-async def test_platform_admin_can_connect_its_demo_workspace(app, monkeypatch):
-    """The maintained demo account can prove Meta OAuth before pilot approval."""
-    email = f"demo-admin-{uuid.uuid4().hex[:10]}@example.com"
-    monkeypatch.setattr(settings, "platform_admin_emails", email)
-    client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    )
-    try:
-        created = await client.post(
-            "/api/v1/auth/signup",
-            json={
-                "email": email,
-                "password": "a-long-enough-password",
-                "display_name": "KCMS Demo Admin",
-            },
-        )
-        assert created.status_code == 201, created.text
-        assert created.json()["user"]["is_platform_admin"] is True
-        client.headers["Authorization"] = f"Bearer {created.json()['token']}"
-        assert (await client.get("/api/v1/settings")).json()["is_sandbox"] is True
-
-        started = await client.post("/api/v1/facebook/oauth/start")
-
+        started = await sandbox.post("/api/v1/facebook/oauth/start")
         assert started.status_code == 201, started.text
         assert started.json()["authorization_url"].startswith(
             "https://facebook.example/authorize?state="
         )
     finally:
-        await client.aclose()
-
+        await approved.aclose()
+        await sandbox.aclose()
 
 async def test_page_connections_require_a_session(app):
     anonymous = httpx.AsyncClient(
