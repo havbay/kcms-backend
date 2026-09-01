@@ -15,11 +15,17 @@ from kcms.integrations import repository
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import CredentialCipher, get_credential_cipher
 from kcms.integrations.facebook import MetaClient, get_meta_client
+from kcms.integrations.repository import PageAlreadyConnected
 from kcms.moderation import repository as moderation_repository
 from kcms.settings import settings
 from kcms.shared.database import database
 
 router = APIRouter(prefix="/api/v1/facebook")
+
+_ALREADY_CONNECTED = (
+    "This Facebook Page is already connected to another KCMS workspace. "
+    "Disconnect it there first, or sign in to that workspace."
+)
 
 
 class ManualPageConnection(BaseModel):
@@ -117,14 +123,17 @@ async def connect_manually(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     encrypted = cipher.seal(page.access_token)
     async with database.acquire() as connection:
-        row = await repository.upsert_page_connection(
-            connection,
-            workspace_id=workspace["id"],
-            user_id=user["id"],
-            page=page,
-            method="MANUAL_TOKEN",
-            credential_ciphertext=encrypted,
-        )
+        try:
+            row = await repository.upsert_page_connection(
+                connection,
+                workspace_id=workspace["id"],
+                user_id=user["id"],
+                page=page,
+                method="MANUAL_TOKEN",
+                credential_ciphertext=encrypted,
+            )
+        except PageAlreadyConnected as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_CONNECTED) from exc
     return _public(row)
 
 
@@ -248,16 +257,19 @@ async def select_page(
             "Page is not in this authorization",
         )
     async with database.acquire() as connection:
-        async with connection.transaction():
-            row = await repository.upsert_page_connection(
-                connection,
-                workspace_id=workspace["id"],
-                user_id=user["id"],
-                page=page,
-                method="FACEBOOK_LOGIN",
-                credential_ciphertext=cipher.seal(page.access_token),
-            )
-            await repository.delete_oauth_attempt(connection, hash_session_token(state))
+        try:
+            async with connection.transaction():
+                row = await repository.upsert_page_connection(
+                    connection,
+                    workspace_id=workspace["id"],
+                    user_id=user["id"],
+                    page=page,
+                    method="FACEBOOK_LOGIN",
+                    credential_ciphertext=cipher.seal(page.access_token),
+                )
+                await repository.delete_oauth_attempt(connection, hash_session_token(state))
+        except PageAlreadyConnected as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_CONNECTED) from exc
     return _public(row)
 
 

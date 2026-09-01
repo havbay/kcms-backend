@@ -6,6 +6,15 @@ import asyncpg
 from kcms.integrations.contracts import ProviderPage
 
 
+class PageAlreadyConnected(Exception):
+    """The Page is connected to a different workspace.
+
+    A Page belongs to one workspace so two clients cannot moderate it at once.
+    The upsert only resolves a conflict on workspace_id, so this collision
+    surfaced as an unhandled unique violation and a 500.
+    """
+
+
 async def upsert_page_connection(
     connection: asyncpg.Connection,
     *,
@@ -15,6 +24,15 @@ async def upsert_page_connection(
     method: str,
     credential_ciphertext: str,
 ) -> dict[str, Any]:
+    clash = await connection.fetchval(
+        "SELECT workspace_id FROM page_connection "
+        "WHERE external_page_id = $1 AND workspace_id <> $2",
+        page.page_id,
+        workspace_id,
+    )
+    if clash:
+        raise PageAlreadyConnected(page.page_id)
+
     row = await connection.fetchrow(
         """INSERT INTO page_connection
            (workspace_id, external_page_id, page_name, connection_method,

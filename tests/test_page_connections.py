@@ -268,3 +268,48 @@ async def test_facebook_login_start_uses_the_business_login_configuration(app):
         ]
     finally:
         await client.aclose()
+
+
+async def test_a_page_connected_elsewhere_is_refused_by_name(app):
+    """A Page belongs to one workspace so two clients cannot moderate it at
+    once. The upsert only resolves a conflict on workspace_id, so this
+    collision used to surface as an unhandled unique violation and a 500."""
+    first = await approved_client(app)
+    second = await approved_client(app)
+    try:
+        connected = await first.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test"},
+        )
+        assert connected.status_code == 201, connected.text
+
+        refused = await second.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test"},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "already connected" in refused.json()["detail"]
+
+        # The first workspace keeps its connection untouched.
+        still = await first.get("/api/v1/facebook/connection")
+        assert still.json()["page_id"] == "page-123"
+    finally:
+        await first.aclose()
+        await second.aclose()
+
+
+async def test_reconnecting_the_same_page_in_the_same_workspace_still_works(app):
+    client = await approved_client(app)
+    try:
+        first = await client.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test"},
+        )
+        assert first.status_code == 201
+        again = await client.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test"},
+        )
+        assert again.status_code == 201, again.text
+    finally:
+        await client.aclose()
