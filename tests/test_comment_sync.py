@@ -213,8 +213,14 @@ async def test_hiding_a_seeded_sample_comment_never_calls_facebook(app, meta):
     send a hide for an id Facebook does not know."""
     client = await connected_client(app)
     try:
-        listed = await client.get("/api/v1/comments", params={"limit": 1})
-        seeded_id = listed.json()["items"][0]["comment_id"]
+        workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
+        async with database.acquire() as connection:
+            seeded_id = await connection.fetchval(
+                "SELECT comment_id FROM comment_content "
+                "WHERE workspace_id = $1 AND page_id = 'demo-page' LIMIT 1",
+                workspace_id,
+            )
+        assert seeded_id, "expected the workspace to have seeded samples"
         acted = await client.post(
             f"/api/v1/comments/{seeded_id}/actions", json={"kind": "HIDE"}
         )
@@ -281,8 +287,14 @@ async def test_removing_samples_keeps_comments_imported_from_the_page(app, meta)
     client = await connected_client(app)
     try:
         await client.post("/api/v1/facebook/sync")
-        before = (await client.get("/api/v1/comments", params={"limit": 100})).json()
-        assert before["total"] > 1, "expected seeded samples alongside the imported comment"
+        workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
+        async with database.acquire() as connection:
+            stored = await connection.fetchval(
+                "SELECT COUNT(*) FROM comment_content "
+                "WHERE workspace_id = $1 AND page_id = 'demo-page'",
+                workspace_id,
+            )
+        assert stored > 0, "expected seeded samples to exist alongside the imported comment"
 
         removed = await client.request("DELETE", "/api/v1/comments/samples")
         assert removed.status_code == 200, removed.text
@@ -332,8 +344,58 @@ async def test_a_member_cannot_empty_the_shared_workspace(app, meta):
         refused = await member.request("DELETE", "/api/v1/comments/samples")
         assert refused.status_code == 403
 
-        still_there = (await owner.get("/api/v1/comments", params={"limit": 100})).json()
-        assert still_there["total"] > 0
+        workspace_id = (await owner.get("/api/v1/settings")).json()["workspace_id"]
+        async with database.acquire() as connection:
+            remaining = await connection.fetchval(
+                "SELECT COUNT(*) FROM comment_content "
+                "WHERE workspace_id = $1 AND page_id = 'demo-page'",
+                workspace_id,
+            )
+        assert remaining > 0
     finally:
         await owner.aclose()
         await member.aclose()
+
+
+async def test_a_connected_workspace_lists_only_its_own_page(app, meta):
+    """Samples exist so the screens are not empty before a Page is connected.
+    Once one is, mixing them into the queue makes it untrustworthy — a
+    moderator cannot tell which rows are real."""
+    meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post("/api/v1/facebook/sync")
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        assert [item["comment_id"] for item in listed["items"]] == ["fb-c-1"]
+        assert listed["total"] == 1
+
+        # The counts must agree with the list rather than counting hidden rows.
+        summary = (await client.get("/api/v1/comments/summary")).json()
+        assert summary["processed"] == 1
+    finally:
+        await client.aclose()
+
+
+async def test_a_workspace_with_no_connection_still_sees_its_samples(app, meta):
+    """Filtering unconditionally would leave a new workspace with an empty
+    dashboard and nothing to demonstrate."""
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        created = await client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": f"nopage-{uuid.uuid4().hex[:10]}@example.com",
+                "password": "a-long-enough-password",
+                "display_name": "Sok Dara",
+                "organization": "No Page Yet",
+            },
+        )
+        client.headers["Authorization"] = f"Bearer {created.json()['token']}"
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        assert listed["total"] > 0
+        summary = (await client.get("/api/v1/comments/summary")).json()
+        assert summary["processed"] == listed["total"]
+    finally:
+        await client.aclose()

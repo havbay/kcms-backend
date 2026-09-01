@@ -12,6 +12,17 @@ from kcms.moderation.contracts import CommentContext
 from kcms.moderation.pattern_matcher import PatternMatcher
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 
+# Once a workspace connects a Page, the queue is that Page's comments. The
+# seeded samples exist so the screens are not empty before a connection, and
+# showing them alongside real comments makes the queue untrustworthy. Without a
+# connection nothing is filtered, so a new workspace still has something to show.
+CONNECTED_PAGE_ONLY = """
+    AND (
+        NOT EXISTS (SELECT 1 FROM page_connection pc WHERE pc.workspace_id = $1)
+        OR c.page_id = (SELECT external_page_id FROM page_connection WHERE workspace_id = $1)
+    )
+"""
+
 WORK_LIST_SELECT = """
 SELECT
     c.comment_id,
@@ -149,7 +160,7 @@ async def fetch_work_list(
     elif review_status == "ACTIONED":
         conditions.append("a.kind IS NOT NULL")
 
-    where = " WHERE " + " AND ".join(conditions)
+    where = " WHERE " + " AND ".join(conditions) + CONNECTED_PAGE_ONLY
     order = {
         "NEWEST": "c.posted_at DESC, c.comment_id",
         "OLDEST": "c.posted_at, c.comment_id",
@@ -204,7 +215,8 @@ async def summarise_workspace(
         LEFT JOIN latest_verdict v ON v.comment_id = c.comment_id
         LEFT JOIN latest_action a ON a.comment_id = c.comment_id
         WHERE c.workspace_id = $1
-        """,
+        """
+        + CONNECTED_PAGE_ONLY,
         workspace_id,
     )
     reasons = await connection.fetch(
