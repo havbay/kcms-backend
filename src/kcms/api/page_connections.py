@@ -15,6 +15,7 @@ from kcms.integrations import repository
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import CredentialCipher, get_credential_cipher
 from kcms.integrations.facebook import MetaClient, get_meta_client
+from kcms.moderation import repository as moderation_repository
 from kcms.settings import settings
 from kcms.shared.database import database
 
@@ -269,3 +270,53 @@ async def disconnect(
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
         await repository.delete_page_connection(connection, workspace["id"])
+
+
+class SyncResult(BaseModel):
+    fetched: int
+    imported: int
+    page_id: str
+    page_name: str
+    last_synced_at: datetime | None
+
+
+@router.post("/sync", operation_id="syncFacebookComments", response_model=SyncResult)
+async def sync_comments(
+    user: Annotated[dict[str, Any], Depends(current_user)],
+    meta: Annotated[MetaClient, Depends(get_meta_client)],
+    cipher: Annotated[CredentialCipher, Depends(get_credential_cipher)],
+) -> SyncResult:
+    """Pull comments from the connected Page into this workspace.
+
+    Re-syncing is safe: the provider's comment id is the primary key, so an
+    already-imported comment keeps its verdict, actions and corrections.
+    """
+    async with database.acquire() as connection:
+        workspace = await _workspace(connection, user)
+        found = await repository.get_page_connection(connection, workspace["id"])
+        if not found:
+            raise HTTPException(status.HTTP_409_CONFLICT, "no Facebook Page is connected")
+        stored = await repository.credential_for_workspace(connection, workspace["id"])
+        if not stored:
+            raise HTTPException(status.HTTP_409_CONFLICT, "no Facebook Page is connected")
+        token = cipher.open(stored["credential_ciphertext"])
+
+    try:
+        comments = await meta.fetch_comments(stored["external_page_id"], token)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    async with database.acquire() as connection:
+        imported = await moderation_repository.ingest_provider_comments(
+            connection, workspace["id"], stored["external_page_id"], comments
+        )
+        await repository.mark_synced(connection, workspace["id"])
+        refreshed = await repository.get_page_connection(connection, workspace["id"])
+
+    return SyncResult(
+        fetched=len(comments),
+        imported=imported,
+        page_id=found["page_id"],
+        page_name=found["page_name"],
+        last_synced_at=refreshed["last_synced_at"] if refreshed else None,
+    )

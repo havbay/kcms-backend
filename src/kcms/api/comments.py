@@ -6,6 +6,9 @@ from pydantic import BaseModel
 
 from kcms.api.auth import current_user
 from kcms.auth import repository as auth_repository
+from kcms.integrations import repository as integrations_repository
+from kcms.integrations.credentials import CredentialCipher, get_optional_credential_cipher
+from kcms.integrations.facebook import MetaClient, get_optional_meta_client
 from kcms.moderation import repository
 from kcms.shared.database import database
 
@@ -160,9 +163,17 @@ async def record_action(
     comment_id: str,
     body: ActionRequest,
     user: Annotated[dict[str, Any], Depends(current_user)],
+    meta: Annotated[MetaClient | None, Depends(get_optional_meta_client)],
+    cipher: Annotated[CredentialCipher | None, Depends(get_optional_credential_cipher)],
 ) -> list[HistoryEntry]:
     """Records a moderation Action. Actions are append-only and reversible,
-    and never become training labels."""
+    and never become training labels.
+
+    When the comment came from a connected Facebook Page, HIDE and UNHIDE are
+    applied on Facebook as well. The Action row and the Facebook state are
+    written together: if Facebook refuses, the row is rolled back, because an
+    Action records what actually happened to the comment.
+    """
     _require_database()
     async with database.acquire() as connection:
         workspace_id = await _workspace_id(connection, user)
@@ -170,9 +181,48 @@ async def record_action(
         # exists in someone else's workspace.
         if not await repository.comment_belongs_to(connection, comment_id, workspace_id):
             raise HTTPException(status_code=404, detail="comment not found")
-        await repository.record_action(connection, comment_id, body.kind, user["display_name"])
+
+        mirror = await _provider_credential(connection, comment_id, workspace_id, body.kind)
+
+        async with connection.transaction():
+            await repository.record_action(
+                connection, comment_id, body.kind, user["display_name"]
+            )
+            if mirror:
+                if meta is None or cipher is None:
+                    raise HTTPException(
+                        status.HTTP_503_SERVICE_UNAVAILABLE,
+                        "this comment is on a connected Facebook Page, but Facebook "
+                        "is not configured on this deployment",
+                    )
+                try:
+                    await meta.set_comment_hidden(
+                        comment_id,
+                        cipher.open(mirror["credential_ciphertext"]),
+                        hidden=body.kind == "HIDE",
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
         history = await repository.fetch_history(connection, comment_id)
     return [HistoryEntry(**entry) for entry in history]
+
+
+async def _provider_credential(
+    connection, comment_id: str, workspace_id: str, kind: str
+) -> dict[str, Any] | None:
+    """The stored Page credential when this action must reach Facebook.
+
+    Returns None for LEAVE, and for seeded sample comments, whose page_id is
+    the sandbox Page rather than a connected one.
+    """
+    if kind not in ("HIDE", "UNHIDE"):
+        return None
+    stored = await integrations_repository.credential_for_workspace(connection, workspace_id)
+    if not stored:
+        return None
+    page_id = await repository.comment_page_id(connection, comment_id)
+    return stored if page_id == stored["external_page_id"] else None
 
 
 @router.post(

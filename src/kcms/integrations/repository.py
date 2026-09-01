@@ -121,3 +121,24 @@ async def delete_oauth_attempt(connection: asyncpg.Connection, state_hash: str) 
     await connection.execute(
         "DELETE FROM facebook_oauth_attempt WHERE state_hash = $1", state_hash
     )
+
+
+async def mark_synced(connection: asyncpg.Connection, workspace_id: str) -> None:
+    await connection.execute(
+        "UPDATE page_connection SET last_synced_at = NOW(), updated_at = NOW() "
+        "WHERE workspace_id = $1",
+        workspace_id,
+    )
+
+
+async def credential_for_workspace(
+    connection: asyncpg.Connection, workspace_id: str
+) -> dict[str, Any] | None:
+    """The stored Page credential. Kept separate from get_page_connection so
+    the ciphertext is read only where it is actually needed."""
+    row = await connection.fetchrow(
+        "SELECT external_page_id, credential_ciphertext, tasks "
+        "FROM page_connection WHERE workspace_id = $1",
+        workspace_id,
+    )
+    return dict(row) if row else None

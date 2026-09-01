@@ -1112,6 +1112,47 @@
         "title": "Summary",
         "type": "object"
       },
+      "SyncResult": {
+        "properties": {
+          "fetched": {
+            "title": "Fetched",
+            "type": "integer"
+          },
+          "imported": {
+            "title": "Imported",
+            "type": "integer"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fetched",
+          "imported",
+          "page_id",
+          "page_name",
+          "last_synced_at"
+        ],
+        "title": "SyncResult",
+        "type": "object"
+      },
       "Team": {
         "properties": {
           "invitations": {
@@ -2090,7 +2131,7 @@
     },
     "/api/v1/comments/{comment_id}/actions": {
       "post": {
-        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.",
+        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, HIDE and UNHIDE are\napplied on Facebook as well. The Action row and the Facebook state are\nwritten together: if Facebook refuses, the row is rolled back, because an\nAction records what actually happened to the comment.",
         "operationId": "recordAction",
         "parameters": [
           {
@@ -2527,6 +2568,53 @@
           }
         },
         "summary": "Start Authorization"
+      }
+    },
+    "/api/v1/facebook/sync": {
+      "post": {
+        "description": "Pull comments from the connected Page into this workspace.\n\nRe-syncing is safe: the provider's comment id is the primary key, so an\nalready-imported comment keeps its verdict, actions and corrections.",
+        "operationId": "syncFacebookComments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Comments"
       }
     },
     "/api/v1/health": {

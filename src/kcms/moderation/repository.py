@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import asyncpg
 
+from kcms.integrations.contracts import ProviderComment
 from kcms.moderation.contracts import CommentContext
 from kcms.moderation.pattern_matcher import PatternMatcher
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
@@ -273,3 +275,79 @@ async def record_correction(
         comment_id, severity, target, model_version or "unknown", note, actor,
     )
     return dict(row) if row else None
+
+
+async def ingest_provider_comments(
+    connection: asyncpg.Connection,
+    workspace_id: str,
+    page_id: str,
+    comments: Sequence[ProviderComment],
+) -> int:
+    """Store comments pulled from the provider and classify the new ones.
+
+    The provider's own comment id is the primary key, so re-syncing the same
+    Page is idempotent: an existing comment is skipped rather than duplicated,
+    and its verdict, actions and corrections survive the next sync.
+    """
+    if not comments:
+        return 0
+
+    existing = {
+        row["comment_id"]
+        for row in await connection.fetch(
+            "SELECT comment_id FROM comment_content WHERE comment_id = ANY($1::TEXT[])",
+            [c.comment_id for c in comments],
+        )
+    }
+    fresh = [c for c in comments if c.comment_id not in existing]
+    if not fresh:
+        return 0
+
+    contexts = [
+        CommentContext(
+            comment_id=c.comment_id,
+            text=c.text,
+            is_reply=c.is_reply,
+            parent_text=c.parent_text,
+            post_text=c.post_text,
+        )
+        for c in fresh
+    ]
+    verdicts = await PatternMatcher().classify(contexts)
+
+    async with connection.transaction():
+        for comment, verdict in zip(fresh, verdicts, strict=True):
+            await connection.execute(
+                """INSERT INTO comment_content
+                   (comment_id, page_id, workspace_id, author_ref, text,
+                    post_text, parent_text, is_reply, post_kind, post_permalink, posted_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   ON CONFLICT (comment_id) DO NOTHING""",
+                comment.comment_id, page_id, workspace_id, comment.author_ref, comment.text,
+                comment.post_text, comment.parent_text, comment.is_reply,
+                comment.post_kind, comment.post_permalink, comment.created_time,
+            )
+            await connection.execute(
+                """INSERT INTO verdict
+                   (comment_id, severity, severity_confidence, target, target_confidence,
+                    abstain, surfaced_reason, rationale, model_version)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                comment.comment_id, verdict.severity.value, verdict.severity_confidence,
+                verdict.target.value, verdict.target_confidence, verdict.abstain,
+                verdict.surfaced_reason.value, verdict.rationale, verdict.model_version,
+            )
+    return len(fresh)
+
+
+async def comment_page_id(
+    connection: asyncpg.Connection, comment_id: str
+) -> str | None:
+    """The Page a stored comment came from.
+
+    Seeded sample comments carry the sandbox Page id, so this is what
+    separates a comment that must be mirrored to Facebook from one that
+    exists only in KCMS.
+    """
+    return await connection.fetchval(
+        "SELECT page_id FROM comment_content WHERE comment_id = $1", comment_id
+    )

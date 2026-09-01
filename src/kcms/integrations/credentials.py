@@ -38,3 +38,10 @@ def get_credential_cipher() -> CredentialCipher:
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "provider credential encryption is misconfigured",
         ) from exc
+
+
+def get_optional_credential_cipher() -> CredentialCipher | None:
+    try:
+        return get_credential_cipher()
+    except HTTPException:
+        return None
