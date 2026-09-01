@@ -3,6 +3,7 @@ import secrets
 from dataclasses import asdict
 from datetime import datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -159,31 +160,57 @@ async def start_authorization(
     return OAuthStart(authorization_url=meta.authorization_url(state))
 
 
+def _connect_redirect(**query: str) -> RedirectResponse:
+    target = f"{settings.public_frontend_url.rstrip('/')}/app/connect"
+    return RedirectResponse(
+        f"{target}?{urlencode(query)}", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
 @router.get("/oauth/callback", include_in_schema=False)
 async def authorization_callback(
-    code: str,
-    state: str,
     meta: Annotated[MetaClient, Depends(get_meta_client)],
     cipher: Annotated[CredentialCipher, Depends(get_credential_cipher)],
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
 ) -> RedirectResponse:
+    """Return the browser to KCMS whatever happens.
+
+    Every failure here used to raise, which rendered JSON on the API's own
+    domain: the operator never came back to the app, saw no explanation, and
+    on navigating back found the connect screen exactly as before. Meta also
+    calls this with `error` and no `code` when someone cancels, which did not
+    even satisfy the signature.
+
+    The reason travels as a short code rather than a message so the frontend
+    can say it in the reader's own language.
+    """
+    if error or not code or not state:
+        # Cancelling is the ordinary case here, not a fault.
+        return _connect_redirect(facebook_error="denied" if error else "incomplete")
+
     state_hash = hash_session_token(state)
     async with database.acquire() as connection:
         attempt = await repository.oauth_attempt(connection, state_hash)
     if not attempt:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "authorization state is invalid")
+        return _connect_redirect(facebook_error="state_invalid")
+
     try:
         user_token = await meta.exchange_code(code)
         pages = await meta.list_pages(user_token)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+    except ValueError:
+        return _connect_redirect(facebook_error="exchange_failed")
+
     if not pages:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no authorized Pages found")
+        return _connect_redirect(facebook_error="no_pages")
+
     encrypted = cipher.seal(json.dumps([asdict(page) for page in pages]))
     async with database.acquire() as connection:
         if not await repository.store_oauth_candidates(connection, state_hash, encrypted):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "authorization state expired")
-    target = f"{settings.public_frontend_url.rstrip('/')}/app/connect?facebook_session={state}"
-    return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
+            return _connect_redirect(facebook_error="state_expired")
+
+    return _connect_redirect(facebook_session=state)
 
 
 async def _oauth_pages(

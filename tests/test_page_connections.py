@@ -313,3 +313,51 @@ async def test_reconnecting_the_same_page_in_the_same_workspace_still_works(app)
         assert again.status_code == 201, again.text
     finally:
         await client.aclose()
+
+
+async def test_a_cancelled_authorization_returns_to_kcms_with_a_reason(app):
+    """Meta calls the callback with `error` and no `code` when someone cancels.
+    That did not satisfy the signature, so the operator got a validation error
+    on the API's own domain instead of coming back to the app."""
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        response = await client.get(
+            "/api/v1/facebook/oauth/callback",
+            params={"error": "access_denied", "error_reason": "user_denied"},
+        )
+        assert response.status_code == 303, response.text
+        assert "/app/connect?facebook_error=denied" in response.headers["location"]
+    finally:
+        await client.aclose()
+
+
+async def test_an_unknown_state_returns_to_kcms_rather_than_rendering_json(app):
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        response = await client.get(
+            "/api/v1/facebook/oauth/callback",
+            params={"code": "valid-code", "state": "never-issued"},
+        )
+        assert response.status_code == 303
+        assert "facebook_error=state_invalid" in response.headers["location"]
+    finally:
+        await client.aclose()
+
+
+async def test_a_rejected_code_returns_to_kcms_with_a_reason(app):
+    """The exchange failing is the most likely real failure, and it used to be
+    entirely invisible: JSON on the API domain and no way back."""
+    client = await approved_client(app)
+    try:
+        started = await client.post("/api/v1/facebook/oauth/start")
+        state = parse_qs(urlparse(started.json()["authorization_url"]).query)["state"][0]
+
+        response = await client.get(
+            "/api/v1/facebook/oauth/callback",
+            params={"code": "a-code-meta-will-reject", "state": state},
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert "facebook_error=exchange_failed" in response.headers["location"]
+    finally:
+        await client.aclose()
