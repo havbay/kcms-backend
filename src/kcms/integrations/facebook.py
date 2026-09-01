@@ -75,36 +75,53 @@ class GraphMetaClient:
     async def validate_page_token(self, token: str) -> ProviderPage:
         """Identify the Page a token belongs to, or say why it is the wrong token.
 
-        A User token also answers /me with an id and a name, so without the node
-        type a user token would be stored as though it were a Page. `tasks` is
-        requested but not required: some tokens cannot read that field, and
-        failing the whole connection over a missing capability list would be
-        worse than connecting with an empty one.
+        Identity comes from debug_token rather than /me. A User token answers
+        /me with an id and a name just like a Page token, so /me cannot tell
+        them apart; and reading the Page node needs pages_read_engagement,
+        which a token can lack while still being able to read comments and
+        hide them. debug_token needs no Page permission at all and states the
+        token type outright.
         """
-        params = {"fields": "id,name,tasks", "metadata": "1", "access_token": token}
-        try:
-            body = await self._get("me", params)
-        except ValueError:
-            body = await self._get(
-                "me", {"fields": "id,name", "metadata": "1", "access_token": token}
-            )
-
-        node_type = str((body.get("metadata") or {}).get("type", "")).lower()
-        if node_type and node_type != "page":
+        debug = await self._get(
+            "debug_token", {"input_token": token, "access_token": token}
+        )
+        data = debug.get("data") or {}
+        token_type = str(data.get("type", "")).upper()
+        if token_type != "PAGE":
             raise ValueError(
-                "This is a User access token, not a Page access token. In Graph "
-                "API Explorer open the 'User or Page' menu and choose your Page "
-                "under Page Access Tokens, then copy the token again."
+                "This is a "
+                + (token_type.capitalize() or "non-Page")
+                + " access token, not a Page access token. In Graph API Explorer "
+                "open the 'User or Page' menu and choose your Page under Page "
+                "Access Tokens, then copy the token again."
             )
-
-        page_id, page_name = body.get("id"), body.get("name")
-        if not page_id or not page_name:
+        page_id = data.get("profile_id")
+        if not page_id:
             raise ValueError("Meta did not identify a Facebook Page")
+
+        # The Page's own name and task list are a nicety: reading them needs
+        # pages_read_engagement, and a token without it can still moderate.
+        page_name, tasks = "", ()
+        try:
+            profile = await self._get(
+                str(page_id), {"fields": "name,tasks", "access_token": token}
+            )
+            page_name = str(profile.get("name") or "")
+            tasks = tuple(str(task) for task in profile.get("tasks", []))
+        except ValueError:
+            pass
+
+        if not tasks and "pages_manage_engagement" in (data.get("scopes") or []):
+            # Meta withheld the task list, but the token carries the permission
+            # hiding actually requires. Recording that keeps the UI from
+            # claiming this connection cannot moderate when it can.
+            tasks = ("PROFILE_PLUS_MODERATE",)
+
         return ProviderPage(
             page_id=str(page_id),
-            page_name=str(page_name),
+            page_name=page_name or f"Facebook Page {page_id}",
             access_token=token,
-            tasks=tuple(str(task) for task in body.get("tasks", [])),
+            tasks=tasks,
         )
 
     async def exchange_code(self, code: str) -> str:

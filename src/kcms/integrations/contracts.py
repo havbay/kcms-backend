@@ -9,12 +9,23 @@ class ProviderPage:
     access_token: str
     tasks: tuple[str, ...] = ()
 
+    # Meta reports Page tasks under two vocabularies: the New Pages Experience
+    # uses PROFILE_PLUS_ names, while /me/accounts on an ordinary Page returns
+    # the bare names. Recognising only the first reported a real, moderatable
+    # Page as unable to moderate.
+    MODERATION_TASKS = frozenset(
+        {
+            "PROFILE_PLUS_MODERATE",
+            "PROFILE_PLUS_MANAGE",
+            "PROFILE_PLUS_FULL_CONTROL",
+            "MODERATE",
+            "MANAGE",
+        }
+    )
+
     @property
     def can_moderate(self) -> bool:
-        return bool(
-            {"PROFILE_PLUS_MODERATE", "PROFILE_PLUS_MANAGE", "PROFILE_PLUS_FULL_CONTROL"}
-            .intersection(self.tasks)
-        )
+        return bool(self.MODERATION_TASKS.intersection(self.tasks))
 
 
 @dataclass(frozen=True)

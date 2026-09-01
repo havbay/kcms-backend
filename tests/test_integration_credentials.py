@@ -60,37 +60,78 @@ def _graph_client():
 
 
 async def test_a_user_token_is_refused_with_the_correction_to_make(monkeypatch):
-    """A User token also answers /me with an id and a name. Without the node
-    type it would be stored as though it were a Page, and every later call
+    """A User token answers /me with an id and a name just like a Page token.
+    Without the token type it would be stored as a Page and every later call
     would fail with nothing pointing at the real mistake."""
     client = _graph_client()
 
     async def fake_get(path, params):
-        return {"id": "99", "name": "Nara Chhuon", "metadata": {"type": "user"}}
+        assert path == "debug_token"
+        return {"data": {"type": "USER", "profile_id": None, "scopes": ["pages_show_list"]}}
 
     monkeypatch.setattr(client, "_get", fake_get)
 
     with pytest.raises(ValueError) as refused:
         await client.validate_page_token("user-token")
-    assert "Page access token" in str(refused.value)
+    assert "not a Page access token" in str(refused.value)
 
 
-async def test_a_page_token_connects_even_when_tasks_cannot_be_read(monkeypatch):
-    """Some Page tokens cannot read `tasks`. Refusing the whole connection over
-    a missing capability list would block a Page that is otherwise usable."""
+async def test_a_page_token_connects_without_permission_to_read_the_page(monkeypatch):
+    """Reading the Page node needs pages_read_engagement, which a token can
+    lack while still being able to read comments and hide them. Refusing there
+    would reject a token that works."""
     client = _graph_client()
-    calls: list[dict] = []
 
     async def fake_get(path, params):
-        calls.append(params)
-        if "tasks" in params["fields"]:
-            raise ValueError("Meta rejected the authorization")
-        return {"id": "page-1", "name": "KCMS-Demo", "metadata": {"type": "page"}}
+        if path == "debug_token":
+            return {
+                "data": {
+                    "type": "PAGE",
+                    "profile_id": "page-1",
+                    "scopes": ["pages_manage_engagement", "pages_read_user_content"],
+                }
+            }
+        raise ValueError("Meta rejected the authorization")
 
     monkeypatch.setattr(client, "_get", fake_get)
 
     page = await client.validate_page_token("page-token")
     assert page.page_id == "page-1"
+    # The permission that hiding actually requires is present, so the UI must
+    # not claim this connection cannot moderate.
+    assert page.can_moderate is True
+
+
+async def test_a_readable_page_keeps_the_name_and_tasks_meta_reports(monkeypatch):
+    client = _graph_client()
+
+    async def fake_get(path, params):
+        if path == "debug_token":
+            return {"data": {"type": "PAGE", "profile_id": "page-1", "scopes": []}}
+        return {"name": "KCMS-Demo", "tasks": ["MODERATE", "MANAGE"]}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    page = await client.validate_page_token("page-token")
     assert page.page_name == "KCMS-Demo"
-    assert page.tasks == ()
-    assert len(calls) == 2
+    assert page.tasks == ("MODERATE", "MANAGE")
+
+
+def test_bare_page_tasks_count_as_moderation_capability():
+    """/me/accounts returns MODERATE and MANAGE rather than the PROFILE_PLUS_
+    names. Recognising only the latter reported a real, moderatable Page as
+    unable to moderate."""
+    from kcms.integrations.contracts import ProviderPage
+
+    page = ProviderPage(
+        page_id="page-1",
+        page_name="KCMS-Demo",
+        access_token="t",
+        tasks=("MODERATE", "MESSAGING", "ANALYZE", "ADVERTISE", "CREATE_CONTENT", "MANAGE"),
+    )
+    assert page.can_moderate is True
+
+    without = ProviderPage(
+        page_id="page-2", page_name="Other", access_token="t", tasks=("ANALYZE",)
+    )
+    assert without.can_moderate is False
