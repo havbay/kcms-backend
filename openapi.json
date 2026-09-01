@@ -1385,6 +1385,17 @@
             ],
             "title": "Latest Action At"
           },
+          "latest_action_on_facebook": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Action On Facebook"
+          },
           "latest_actor": {
             "anyOf": [
               {
@@ -1546,6 +1557,7 @@
           "latest_action",
           "latest_actor",
           "latest_action_at",
+          "latest_action_on_facebook",
           "corrected_severity",
           "corrected_target",
           "corrected_by",

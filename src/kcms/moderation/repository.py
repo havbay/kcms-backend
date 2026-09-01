@@ -46,6 +46,7 @@ SELECT
     a.kind        AS latest_action,
     a.actor       AS latest_actor,
     a.occurred_at AS latest_action_at,
+    a.provider_applied AS latest_action_on_facebook,
     k.severity    AS corrected_severity,
     k.target      AS corrected_target,
     k.actor       AS corrected_by,
@@ -241,13 +242,23 @@ async def summarise_workspace(
 
 
 async def record_action(
-    connection: asyncpg.Connection, comment_id: str, kind: str, actor: str
+    connection: asyncpg.Connection,
+    comment_id: str,
+    kind: str,
+    actor: str,
+    provider_applied: bool = False,
 ) -> None:
     """Append an Action. Writes NO Correction: hiding a comment is not a
-    statement that the model's label was wrong (ARCHITECTURE section 6)."""
+    statement that the model's label was wrong (ARCHITECTURE section 6).
+
+    `provider_applied` records whether the action reached Facebook. Hiding a
+    sample comment changes nothing there, and without this the two outcomes
+    were indistinguishable to the moderator.
+    """
     await connection.execute(
-        "INSERT INTO action (comment_id, kind, actor) VALUES ($1, $2, $3)",
-        comment_id, kind, actor,
+        "INSERT INTO action (comment_id, kind, actor, provider_applied) "
+        "VALUES ($1, $2, $3, $4)",
+        comment_id, kind, actor, provider_applied,
     )
 
 

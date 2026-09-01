@@ -41,6 +41,7 @@ class WorkListItem(BaseModel):
     latest_action: str | None
     latest_actor: str | None
     latest_action_at: datetime | None
+    latest_action_on_facebook: bool | None
     corrected_severity: str | None
     corrected_target: str | None
     corrected_by: str | None
@@ -190,7 +191,11 @@ async def record_action(
 
         async with connection.transaction():
             await repository.record_action(
-                connection, comment_id, body.kind, user["display_name"]
+                connection,
+                comment_id,
+                body.kind,
+                user["display_name"],
+                provider_applied=bool(mirror),
             )
             if mirror:
                 if meta is None or cipher is None:

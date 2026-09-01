@@ -399,3 +399,54 @@ async def test_a_workspace_with_no_connection_still_sees_its_samples(app, meta):
         assert summary["processed"] == listed["total"]
     finally:
         await client.aclose()
+
+
+async def test_a_hide_that_reached_facebook_is_distinguishable_from_one_that_did_not(app, meta):
+    """A moderator must be able to tell a hide that changed Facebook from one
+    that only changed KCMS. Both looked identical before, so hiding a sample
+    read as a successful moderation."""
+    meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post("/api/v1/facebook/sync")
+        await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        row = next(i for i in listed["items"] if i["comment_id"] == "fb-c-1")
+        assert row["latest_action"] == "HIDE"
+        assert row["latest_action_on_facebook"] is True
+        assert meta.hidden == [("fb-c-1", True)]
+    finally:
+        await client.aclose()
+
+
+async def test_a_sample_hide_is_marked_as_not_reaching_facebook(app, meta):
+    """The workspace has no connection, so nothing can reach Facebook. The row
+    must say so rather than showing the same status as a real hide."""
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        created = await client.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": f"local-{uuid.uuid4().hex[:10]}@example.com",
+                "password": "a-long-enough-password",
+                "display_name": "Sok Dara",
+                "organization": "No Page",
+            },
+        )
+        client.headers["Authorization"] = f"Bearer {created.json()['token']}"
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 1})).json()
+        sample_id = listed["items"][0]["comment_id"]
+        acted = await client.post(
+            f"/api/v1/comments/{sample_id}/actions", json={"kind": "HIDE"}
+        )
+        assert acted.status_code == 201
+
+        again = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        row = next(i for i in again["items"] if i["comment_id"] == sample_id)
+        assert row["latest_action"] == "HIDE"
+        assert row["latest_action_on_facebook"] is False
+        assert meta.hidden == []
+    finally:
+        await client.aclose()
