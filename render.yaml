@@ -17,6 +17,20 @@ services:
         value: https://kcms-frontend.vercel.app,http://127.0.0.1:5173
       - key: PUBLIC_FRONTEND_URL
         value: https://kcms-frontend.vercel.app
+      - key: META_GRAPH_VERSION
+        value: v26.0
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: META_LOGIN_CONFIG_ID
+        sync: false
+      - key: META_OAUTH_REDIRECT_URI
+        value: https://kcms-backend.onrender.com/api/v1/facebook/oauth/callback
+      - key: META_OAUTH_SCOPES
+        value: pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_engagement,pages_manage_metadata
+      - key: INTEGRATION_ENCRYPTION_KEY
+        sync: false
 
 databases:
   - name: kcms-postgres

@@ -8,7 +8,7 @@ from asgi_lifespan import LifespanManager
 from kcms.app import create_app
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import get_credential_cipher
-from kcms.integrations.facebook import get_meta_client
+from kcms.integrations.facebook import GraphMetaClient, get_meta_client
 from kcms.shared.database import database
 
 
@@ -243,3 +243,26 @@ async def test_facebook_login_lists_pages_without_exposing_their_tokens(app):
     finally:
         await client.aclose()
         await other.aclose()
+
+
+async def test_facebook_login_start_uses_the_business_login_configuration(app):
+    app.dependency_overrides[get_meta_client] = lambda: GraphMetaClient(
+        graph_version="v26.0",
+        app_id="meta-app-123",
+        app_secret="meta-secret-for-test",
+        redirect_uri="https://api.example.com/api/v1/facebook/oauth/callback",
+        scopes="pages_show_list,pages_read_engagement,pages_manage_engagement",
+        login_config_id="business-login-config-456",
+    )
+    client = await approved_client(app)
+    try:
+        started = await client.post("/api/v1/facebook/oauth/start")
+
+        assert started.status_code == 201, started.text
+        query = parse_qs(urlparse(started.json()["authorization_url"]).query)
+        assert query["config_id"] == ["business-login-config-456"]
+        assert query["scope"] == [
+            "pages_show_list,pages_read_engagement,pages_manage_engagement"
+        ]
+    finally:
+        await client.aclose()

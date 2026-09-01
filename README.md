@@ -212,6 +212,7 @@ Administration, metrics with meaningful denominators, and rate limiting.
 |---|---|
 | `META_GRAPH_VERSION` | Explicit supported Graph API version, for example `vXX.X` |
 | `META_APP_ID` / `META_APP_SECRET` | KCMS Meta application credentials |
+| `META_LOGIN_CONFIG_ID` | Facebook Login for Business configuration id |
 | `META_OAUTH_REDIRECT_URI` | Backend OAuth callback URL |
 | `META_OAUTH_SCOPES` | Comma-separated Page permissions requested during authorization |
 | `INTEGRATION_ENCRYPTION_KEY` | Fernet key used only for provider credentials |

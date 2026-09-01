@@ -32,9 +32,11 @@ class Settings(BaseSettings):
     meta_graph_version: str = ""
     meta_app_id: str = ""
     meta_app_secret: str = ""
+    meta_login_config_id: str = ""
     meta_oauth_redirect_uri: str = ""
     meta_oauth_scopes: str = (
-        "pages_show_list,pages_read_engagement,pages_manage_engagement"
+        "pages_show_list,pages_read_engagement,pages_read_user_content,"
+        "pages_manage_engagement,pages_manage_metadata"
     )
     integration_encryption_key: str = ""
 

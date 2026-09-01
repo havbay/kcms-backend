@@ -23,12 +23,14 @@ class GraphMetaClient:
         app_secret: str,
         redirect_uri: str,
         scopes: str,
+        login_config_id: str,
     ):
         self._graph_version = graph_version
         self._app_id = app_id
         self._app_secret = app_secret
         self._redirect_uri = redirect_uri
         self._scopes = scopes
+        self._login_config_id = login_config_id
 
     def authorization_url(self, state: str) -> str:
         query = urlencode(
@@ -37,6 +39,7 @@ class GraphMetaClient:
                 "redirect_uri": self._redirect_uri,
                 "state": state,
                 "scope": self._scopes,
+                "config_id": self._login_config_id,
                 "response_type": "code",
             }
         )
@@ -107,6 +110,7 @@ def get_meta_client() -> MetaClient:
             settings.meta_graph_version,
             settings.meta_app_id,
             settings.meta_app_secret,
+            settings.meta_login_config_id,
             settings.meta_oauth_redirect_uri,
         )
     ):
@@ -120,4 +124,5 @@ def get_meta_client() -> MetaClient:
         settings.meta_app_secret,
         settings.meta_oauth_redirect_uri,
         settings.meta_oauth_scopes,
+        settings.meta_login_config_id,
     )
