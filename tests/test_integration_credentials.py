@@ -88,17 +88,17 @@ async def test_a_page_token_connects_without_permission_to_read_the_page(monkeyp
                 "data": {
                     "type": "PAGE",
                     "profile_id": "page-1",
-                    "scopes": ["pages_manage_engagement", "pages_read_user_content"],
+                    "scopes": ["pages_manage_engagement", "pages_read_engagement"],
                 }
             }
-        raise ValueError("Meta rejected the authorization")
+        raise ValueError("Meta rejected the request")
 
     monkeypatch.setattr(client, "_get", fake_get)
 
     page = await client.validate_page_token("page-token")
     assert page.page_id == "page-1"
-    # The permission that hiding actually requires is present, so the UI must
-    # not claim this connection cannot moderate.
+    # Both scopes hiding needs are present, so the UI must not claim this
+    # connection cannot moderate.
     assert page.can_moderate is True
 
 
@@ -137,45 +137,33 @@ def test_bare_page_tasks_count_as_moderation_capability():
     assert without.can_moderate is False
 
 
-async def test_sync_names_the_missing_read_permission(monkeypatch):
-    """/feed answers {"data": []} rather than an error when the token lacks
-    pages_read_engagement. Without this check an unusable connection reports
-    "no new comments" forever and never says why."""
+async def test_comments_are_read_from_each_post_not_nested_in_the_feed(monkeypatch):
+    """Nesting comments{...} into /feed makes the whole call require
+    pages_read_engagement, while /{post-id}/comments does not. Reading each
+    post's own edge lets a token with only pages_read_user_content see
+    comments, which is what Graph API Explorer commonly produces."""
     client = _graph_client()
+    paths: list[str] = []
 
     async def fake_get(path, params):
-        if path == "debug_token":
-            return {"data": {"scopes": ["pages_manage_engagement", "pages_show_list"]}}
-        raise AssertionError("the feed must not be read without the permission")
-
-    monkeypatch.setattr(client, "_get", fake_get)
-
-    with pytest.raises(ValueError) as refused:
-        await client.fetch_comments("page-1", "page-token")
-    assert "pages_read_engagement" in str(refused.value)
-
-
-async def test_sync_reads_the_feed_once_the_permission_is_granted(monkeypatch):
-    client = _graph_client()
-
-    async def fake_get(path, params):
-        if path == "debug_token":
-            return {"data": {"scopes": ["pages_read_engagement"]}}
+        paths.append(path)
+        if path.endswith("/feed"):
+            assert "comments" not in params["fields"]
+            return {
+                "data": [
+                    {
+                        "id": "post-1",
+                        "message": "តើសេវាកម្មយើងយ៉ាងណា?",
+                        "permalink_url": "https://facebook.com/p/1",
+                    }
+                ]
+            }
         return {
             "data": [
                 {
-                    "id": "post-1",
-                    "message": "តើសេវាកម្មយើងយ៉ាងណា?",
-                    "permalink_url": "https://facebook.com/p/1",
-                    "comments": {
-                        "data": [
-                            {
-                                "id": "c-1",
-                                "message": "សេវាកម្មនេះយឺតណាស់",
-                                "created_time": "2026-09-01T10:00:00+0000",
-                            }
-                        ]
-                    },
+                    "id": "c-1",
+                    "message": "សេវាកម្មនេះយឺតណាស់",
+                    "created_time": "2026-09-01T10:00:00+0000",
                 }
             ]
         }
@@ -187,3 +175,65 @@ async def test_sync_reads_the_feed_once_the_permission_is_granted(monkeypatch):
     assert comments[0].post_text == "តើសេវាកម្មយើងយ៉ាងណា?"
     # Meta withholds `from` for commenters who have not authorized the app.
     assert comments[0].author_ref == "fb:c-1"
+    assert paths == ["page-1/feed", "post-1/comments"]
+
+
+async def test_the_feed_is_retried_without_the_field_that_needs_permission(monkeypatch):
+    """attachments{media_type} alone makes /feed require pages_read_engagement.
+    It only labels the post kind, so losing it must not cost the comments."""
+    client = _graph_client()
+    attempts: list[str] = []
+
+    async def fake_get(path, params):
+        if path.endswith("/feed"):
+            attempts.append(params["fields"])
+            if "attachments" in params["fields"]:
+                raise ValueError("Meta rejected the request: (#10) requires permission")
+            return {"data": [{"id": "post-1", "message": "post"}]}
+        return {"data": [{"id": "c-1", "message": "មតិយោបល់"}]}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    comments = await client.fetch_comments("page-1", "page-token")
+    assert [c.comment_id for c in comments] == ["c-1"]
+    assert len(attempts) == 2
+    assert "attachments" in attempts[0] and "attachments" not in attempts[1]
+
+
+async def test_one_unreadable_post_does_not_lose_the_other_posts_comments(monkeypatch):
+    client = _graph_client()
+
+    async def fake_get(path, params):
+        if path.endswith("/feed"):
+            return {"data": [{"id": "post-1", "message": "a"}, {"id": "post-2", "message": "b"}]}
+        if path == "post-1/comments":
+            raise ValueError("Meta rejected the request")
+        return {"data": [{"id": "c-2", "message": "មតិយោបល់"}]}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    comments = await client.fetch_comments("page-1", "page-token")
+    assert [c.comment_id for c in comments] == ["c-2"]
+
+
+async def test_manage_scope_without_read_scope_is_not_moderation_capability(monkeypatch):
+    """Hiding is refused with "(#200) Requires pages_read_engagement permission
+    to manage the object" when only the manage scope is granted. Reporting
+    moderation there would promise an action that fails when it is used."""
+    client = _graph_client()
+
+    async def fake_get(path, params):
+        if path == "debug_token":
+            return {
+                "data": {
+                    "type": "PAGE",
+                    "profile_id": "page-1",
+                    "scopes": ["pages_manage_engagement", "pages_read_user_content"],
+                }
+            }
+        raise ValueError("Meta rejected the request")
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    page = await client.validate_page_token("page-token")
+    assert page.can_moderate is False

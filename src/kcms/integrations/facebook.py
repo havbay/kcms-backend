@@ -69,7 +69,9 @@ class GraphMetaClient:
         except httpx.RequestError as exc:
             raise ValueError("Meta could not be reached") from exc
         if response.status_code != 200:
-            raise ValueError("Meta rejected the authorization")
+            # Meta names the missing permission or expired token in the body.
+            # Discarding it left every failure indistinguishable.
+            raise ValueError(f"Meta rejected the request: {response.text[:200]}")
         return response.json()
 
     async def validate_page_token(self, token: str) -> ProviderPage:
@@ -111,10 +113,13 @@ class GraphMetaClient:
         except ValueError:
             pass
 
-        if not tasks and "pages_manage_engagement" in (data.get("scopes") or []):
-            # Meta withheld the task list, but the token carries the permission
-            # hiding actually requires. Recording that keeps the UI from
-            # claiming this connection cannot moderate when it can.
+        # Meta withholds the task list from a token that cannot read the Page.
+        # Hiding a comment needs BOTH scopes: pages_manage_engagement alone is
+        # refused with "(#200) Requires pages_read_engagement permission to
+        # manage the object", so claiming moderation on the manage scope alone
+        # would promise an action that fails at the moment it matters.
+        scopes = set(data.get("scopes") or [])
+        if not tasks and {"pages_manage_engagement", "pages_read_engagement"} <= scopes:
             tasks = ("PROFILE_PLUS_MODERATE",)
 
         return ProviderPage(
@@ -196,43 +201,63 @@ class GraphMetaClient:
     async def fetch_comments(self, page_id: str, token: str) -> list[ProviderComment]:
         """Read comments on the Page's recent posts.
 
-        Meta returns comments nested under each post, so one request covers the
-        whole window. `from` is absent for commenters who have not authorized
-        the app - the ordinary case on a real Page - so the author falls back to
-        the comment id rather than being invented.
+        Comments are read from each post's own edge rather than nested inside
+        the feed request. Nesting `comments{...}` into /feed makes the whole
+        call require pages_read_engagement, while /{post-id}/comments does not,
+        so this works with a Page token carrying only pages_read_user_content -
+        what Graph API Explorer commonly produces.
+
+        `from` is absent for commenters who have not authorized the app, the
+        ordinary case on a real Page, so the author falls back to the comment
+        id rather than being invented.
         """
-        # /feed answers {"data": []} rather than an error when the token lacks
-        # pages_read_engagement, so an unusable connection would look like a
-        # quiet Page forever. Check the granted scopes and say so instead.
-        debug = await self._get(
-            "debug_token", {"input_token": token, "access_token": token}
-        )
-        scopes = (debug.get("data") or {}).get("scopes") or []
-        if "pages_read_engagement" not in scopes:
-            raise ValueError(
-                "This Page token is missing the pages_read_engagement "
-                "permission, so Facebook returns no posts or comments. Add it "
-                "in Graph API Explorer, generate the Page token again, and "
-                "reconnect the Page."
+        # attachments{media_type} is what distinguishes a video post from a
+        # text one, and it alone makes /feed require pages_read_engagement.
+        # It only labels the post, so a token without that permission reads
+        # the same comments and loses only the label.
+        try:
+            feed = await self._get(
+                f"{page_id}/feed",
+                {
+                    "fields": (
+                        "id,message,created_time,permalink_url,attachments{media_type}"
+                    ),
+                    "limit": "25",
+                    "access_token": token,
+                },
+            )
+        except ValueError:
+            feed = await self._get(
+                f"{page_id}/feed",
+                {
+                    "fields": "id,message,created_time,permalink_url",
+                    "limit": "25",
+                    "access_token": token,
+                },
             )
 
-        body = await self._get(
-            f"{page_id}/feed",
-            {
-                "fields": (
-                    "id,message,created_time,permalink_url,attachments{media_type},"
-                    "comments.limit(100){id,message,created_time,from,parent{id,message}}"
-                ),
-                "limit": "25",
-                "access_token": token,
-            },
-        )
         comments: list[ProviderComment] = []
-        for post in body.get("data", []):
+        for post in feed.get("data", []):
+            post_id = post.get("id")
+            if not post_id:
+                continue
             post_text = post.get("message")
             post_permalink = post.get("permalink_url")
             post_kind = self._post_kind(post)
-            for item in post.get("comments", {}).get("data", []):
+            try:
+                body = await self._get(
+                    f"{post_id}/comments",
+                    {
+                        "fields": "id,message,created_time,from,parent{id,message}",
+                        "limit": "100",
+                        "access_token": token,
+                    },
+                )
+            except ValueError:
+                # One unreadable post must not lose the comments on every
+                # other post in the window.
+                continue
+            for item in body.get("data", []):
                 comment_id, message = item.get("id"), item.get("message")
                 if not comment_id or not message:
                     # A sticker- or photo-only comment carries no text to
