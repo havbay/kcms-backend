@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from kcms.api.auth import current_user
 from kcms.auth import repository as auth_repository
+from kcms.moderation import repository as moderation_repository
 from kcms.shared.database import database
 from kcms.team import repository
 
@@ -17,6 +18,9 @@ class WorkspaceSettings(BaseModel):
     is_sandbox: bool
     your_role: str
     display_name: str
+    # What is stored, not how the workspace was provisioned: the removal
+    # control depends on samples existing, not on the sandbox flag.
+    sample_comments: int
 
 
 class RenameWorkspace(BaseModel):
@@ -32,6 +36,21 @@ def _require_database() -> None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "database unavailable")
 
 
+async def _settings(
+    connection, workspace: dict[str, Any], display_name: str
+) -> WorkspaceSettings:
+    return WorkspaceSettings(
+        workspace_id=workspace["id"],
+        workspace_name=workspace["name"],
+        is_sandbox=workspace["is_sandbox"],
+        your_role=workspace["role"],
+        display_name=display_name,
+        sample_comments=await moderation_repository.count_sample_comments(
+            connection, workspace["id"]
+        ),
+    )
+
+
 @router.get("", operation_id="getSettings", response_model=WorkspaceSettings)
 async def get_settings(
     user: Annotated[dict[str, Any], Depends(current_user)],
@@ -41,13 +60,8 @@ async def get_settings(
         workspace = await auth_repository.workspace_for_user(connection, user["id"])
     if not workspace:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
-    return WorkspaceSettings(
-        workspace_id=workspace["id"],
-        workspace_name=workspace["name"],
-        is_sandbox=workspace["is_sandbox"],
-        your_role=workspace["role"],
-        display_name=user["display_name"],
-    )
+    async with database.acquire() as connection:
+        return await _settings(connection, workspace, user["display_name"])
 
 
 @router.patch(
@@ -67,13 +81,9 @@ async def rename_workspace(
         if workspace["role"] != "owner":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "only an owner can rename a workspace")
         await repository.rename_workspace(connection, workspace["id"], body.name)
-    return WorkspaceSettings(
-        workspace_id=workspace["id"],
-        workspace_name=body.name.strip(),
-        is_sandbox=workspace["is_sandbox"],
-        your_role=workspace["role"],
-        display_name=user["display_name"],
-    )
+        return await _settings(
+            connection, {**workspace, "name": body.name.strip()}, user["display_name"]
+        )
 
 
 @router.patch("/me", operation_id="renameSelf", response_model=WorkspaceSettings)
@@ -89,10 +99,5 @@ async def rename_self(
         workspace = await auth_repository.workspace_for_user(connection, user["id"])
     if not workspace:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
-    return WorkspaceSettings(
-        workspace_id=workspace["id"],
-        workspace_name=workspace["name"],
-        is_sandbox=workspace["is_sandbox"],
-        your_role=workspace["role"],
-        display_name=body.display_name.strip(),
-    )
+    async with database.acquire() as connection:
+        return await _settings(connection, workspace, body.display_name.strip())

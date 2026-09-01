@@ -117,3 +117,22 @@ async def test_a_rename_does_not_rewrite_who_took_past_actions(owner):
 async def test_a_blank_name_is_rejected(owner):
     assert (await owner.patch("/api/v1/settings/workspace", json={"name": ""})).status_code == 422
     assert (await owner.patch("/api/v1/settings/me", json={"display_name": ""})).status_code == 422
+
+
+async def test_settings_report_how_many_samples_remain(owner):
+    """The removal control depended on workspace.is_sandbox, which describes
+    provisioning rather than what is stored. A workspace whose flag had been
+    cleared kept its samples with no way to remove them."""
+    client = owner
+    before = (await client.get("/api/v1/settings")).json()
+    assert before["sample_comments"] > 0
+
+
+    removed = await client.request("DELETE", "/api/v1/comments/samples")
+    assert removed.status_code == 200, removed.text
+
+
+    after = (await client.get("/api/v1/settings")).json()
+    assert after["sample_comments"] == 0
+    # The flag follows the data rather than the other way round.
+    assert after["is_sandbox"] is False

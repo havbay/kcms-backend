@@ -411,3 +411,20 @@ async def delete_sample_comments(connection: asyncpg.Connection, workspace_id: s
             "UPDATE workspace SET is_sandbox = FALSE WHERE id = $1", workspace_id
         )
     return len(ids)
+
+
+async def count_sample_comments(connection: asyncpg.Connection, workspace_id: str) -> int:
+    """How many seeded samples this workspace still holds.
+
+    The removal control was gated on workspace.is_sandbox, which describes
+    provisioning rather than what is actually stored — so a workspace whose
+    flag had been cleared could keep its samples with no way to remove them.
+    """
+    return (
+        await connection.fetchval(
+            "SELECT COUNT(*) FROM comment_content WHERE workspace_id = $1 AND page_id = $2",
+            workspace_id,
+            PAGE_ID,
+        )
+        or 0
+    )

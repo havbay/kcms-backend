@@ -1576,6 +1576,10 @@
             "title": "Is Sandbox",
             "type": "boolean"
           },
+          "sample_comments": {
+            "title": "Sample Comments",
+            "type": "integer"
+          },
           "workspace_id": {
             "title": "Workspace Id",
             "type": "string"
@@ -1594,7 +1598,8 @@
           "workspace_name",
           "is_sandbox",
           "your_role",
-          "display_name"
+          "display_name",
+          "sample_comments"
         ],
         "title": "WorkspaceSettings",
         "type": "object"
