@@ -12,11 +12,12 @@ from pydantic import BaseModel, Field
 from kcms.api.auth import current_user
 from kcms.auth import repository as auth_repository
 from kcms.auth.security import hash_session_token
+from kcms.billing.plans import PLAN_PAGE_LIMITS
 from kcms.integrations import repository
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import CredentialCipher, get_credential_cipher
 from kcms.integrations.facebook import MetaClient, get_meta_client
-from kcms.integrations.repository import PageAlreadyConnected
+from kcms.integrations.repository import PageAlreadyConnected, PageLimitReached
 from kcms.moderation import repository as moderation_repository
 from kcms.settings import settings
 from kcms.shared.database import database
@@ -26,6 +27,11 @@ router = APIRouter(prefix="/api/v1/facebook")
 _ALREADY_CONNECTED = (
     "This Facebook Page is already connected to another KCMS workspace. "
     "Disconnect it there first, or sign in to that workspace."
+)
+
+_LIMIT_REACHED = (
+    "Your plan's Page limit is reached. Disconnect a Page or upgrade your plan "
+    "to connect another one."
 )
 
 
@@ -44,15 +50,10 @@ class PageConnection(BaseModel):
     last_synced_at: datetime | None
 
 
-class PageConnectionState(BaseModel):
-    state: Literal["NOT_CONNECTED", "CONNECTED"]
-    page_id: str | None = None
-    page_name: str | None = None
-    method: Literal["FACEBOOK_LOGIN", "MANUAL_TOKEN"] | None = None
-    tasks: list[str] = Field(default_factory=list)
-    can_moderate: bool = False
-    connected_at: datetime | None = None
-    last_synced_at: datetime | None = None
+class PageConnections(BaseModel):
+    plan: Literal["STARTER", "GROWTH"]
+    page_limit: int
+    connections: list[PageConnection]
 
 
 class OAuthStart(BaseModel):
@@ -90,17 +91,30 @@ async def _workspace(connection, user: dict[str, Any]) -> dict[str, Any]:
     return workspace
 
 
+async def _require_capacity(connection, workspace: dict[str, Any], page_id: str) -> None:
+    """Reconnecting a Page you already hold never counts against the limit —
+    only genuinely adding a new one does."""
+    existing = await repository.get_page_connection(connection, workspace["id"], page_id)
+    if existing:
+        return
+    count = await repository.count_page_connections(connection, workspace["id"])
+    if count >= PLAN_PAGE_LIMITS[workspace["plan"]]:
+        raise PageLimitReached(page_id)
+
+
 @router.get(
-    "/connection", operation_id="getFacebookConnection", response_model=PageConnectionState
+    "/connections", operation_id="listFacebookConnections", response_model=PageConnections
 )
-async def get_connection(
+async def list_connections(
     user: Annotated[dict[str, Any], Depends(current_user)],
-) -> PageConnectionState:
+) -> PageConnections:
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
-        found = await repository.get_page_connection(connection, workspace["id"])
-    return PageConnectionState(**_public(found).model_dump()) if found else PageConnectionState(
-        state="NOT_CONNECTED"
+        found = await repository.list_page_connections(connection, workspace["id"])
+    return PageConnections(
+        plan=workspace["plan"],
+        page_limit=PLAN_PAGE_LIMITS[workspace["plan"]],
+        connections=[_public(row) for row in found],
     )
 
 
@@ -125,7 +139,8 @@ async def connect_manually(
     encrypted = cipher.seal(page.access_token)
     async with database.acquire() as connection:
         try:
-            row = await repository.upsert_page_connection(
+            await _require_capacity(connection, workspace, page.page_id)
+            row = await repository.add_page_connection(
                 connection,
                 workspace_id=workspace["id"],
                 user_id=user["id"],
@@ -135,6 +150,8 @@ async def connect_manually(
             )
         except PageAlreadyConnected as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_CONNECTED) from exc
+        except PageLimitReached as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, _LIMIT_REACHED) from exc
     return _public(row)
 
 
@@ -285,8 +302,9 @@ async def select_page(
         )
     async with database.acquire() as connection:
         try:
+            await _require_capacity(connection, workspace, page.page_id)
             async with connection.transaction():
-                row = await repository.upsert_page_connection(
+                row = await repository.add_page_connection(
                     connection,
                     workspace_id=workspace["id"],
                     user_id=user["id"],
@@ -297,18 +315,23 @@ async def select_page(
                 await repository.delete_oauth_attempt(connection, hash_session_token(state))
         except PageAlreadyConnected as exc:
             raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_CONNECTED) from exc
+        except PageLimitReached as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, _LIMIT_REACHED) from exc
     return _public(row)
 
 
 @router.delete(
-    "/connection", operation_id="disconnectFacebookPage", status_code=status.HTTP_204_NO_CONTENT
+    "/connections/{page_id}",
+    operation_id="disconnectFacebookPage",
+    status_code=status.HTTP_204_NO_CONTENT,
 )
 async def disconnect(
+    page_id: str,
     user: Annotated[dict[str, Any], Depends(current_user)],
 ) -> None:
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
-        await repository.delete_page_connection(connection, workspace["id"])
+        await repository.delete_page_connection(connection, workspace["id"], page_id)
 
 
 class SyncResult(BaseModel):
@@ -319,8 +342,11 @@ class SyncResult(BaseModel):
     last_synced_at: datetime | None
 
 
-@router.post("/sync", operation_id="syncFacebookComments", response_model=SyncResult)
+@router.post(
+    "/connections/{page_id}/sync", operation_id="syncFacebookComments", response_model=SyncResult
+)
 async def sync_comments(
+    page_id: str,
     user: Annotated[dict[str, Any], Depends(current_user)],
     meta: Annotated[MetaClient, Depends(get_meta_client)],
     cipher: Annotated[CredentialCipher, Depends(get_credential_cipher)],
@@ -332,10 +358,10 @@ async def sync_comments(
     """
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
-        found = await repository.get_page_connection(connection, workspace["id"])
+        found = await repository.get_page_connection(connection, workspace["id"], page_id)
         if not found:
             raise HTTPException(status.HTTP_409_CONFLICT, "no Facebook Page is connected")
-        stored = await repository.credential_for_workspace(connection, workspace["id"])
+        stored = await repository.credential_for_page(connection, workspace["id"], page_id)
         if not stored:
             raise HTTPException(status.HTTP_409_CONFLICT, "no Facebook Page is connected")
         token = cipher.open(stored["credential_ciphertext"])
@@ -349,8 +375,8 @@ async def sync_comments(
         imported = await moderation_repository.ingest_provider_comments(
             connection, workspace["id"], stored["external_page_id"], comments
         )
-        await repository.mark_synced(connection, workspace["id"])
-        refreshed = await repository.get_page_connection(connection, workspace["id"])
+        await repository.mark_synced(connection, workspace["id"], page_id)
+        refreshed = await repository.get_page_connection(connection, workspace["id"], page_id)
 
     return SyncResult(
         fetched=len(comments),

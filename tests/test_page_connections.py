@@ -23,11 +23,14 @@ class TestCipher:
 
 class FakeMetaClient:
     async def validate_page_token(self, token: str) -> ProviderPage:
-        if token != "valid-page-token-for-test":
+        if not token.startswith("valid-page-token-for-test"):
             raise ValueError("invalid Page token")
+        # A trailing suffix (e.g. "valid-page-token-for-test-2") stands in for
+        # a distinct real Page, so a test can connect more than one.
+        suffix = token.removeprefix("valid-page-token-for-test")
         return ProviderPage(
-            page_id="page-123",
-            page_name="Angkor Shop",
+            page_id=f"page-123{suffix}",
+            page_name=f"Angkor Shop{suffix}",
             access_token=token,
             tasks=("PROFILE_PLUS_MODERATE", "PROFILE_PLUS_MANAGE"),
         )
@@ -83,7 +86,8 @@ async def app():
             pytest.skip("no database available")
         async with database.acquire() as connection:
             await connection.execute(
-                "DELETE FROM page_connection WHERE external_page_id IN ('page-123', 'page-456')"
+                "DELETE FROM page_connection "
+                "WHERE external_page_id LIKE 'page-123%' OR external_page_id = 'page-456'"
             )
         yield application
 
@@ -126,23 +130,23 @@ async def test_manual_page_token_creates_one_non_disclosing_connection(app):
 async def test_connection_status_and_disconnect_never_return_the_credential(app):
     client = await approved_client(app)
     try:
-        empty = await client.get("/api/v1/facebook/connection")
+        empty = await client.get("/api/v1/facebook/connections")
         assert empty.status_code == 200
-        assert empty.json()["state"] == "NOT_CONNECTED"
+        assert empty.json() == {"plan": "STARTER", "page_limit": 3, "connections": []}
 
         await client.post(
             "/api/v1/facebook/connections/manual",
             json={"page_access_token": "valid-page-token-for-test"},
         )
-        connected = await client.get("/api/v1/facebook/connection")
+        connected = await client.get("/api/v1/facebook/connections")
         assert connected.status_code == 200
-        assert connected.json()["page_id"] == "page-123"
-        assert "page_access_token" not in connected.json()
-        assert "credential" not in connected.json()
+        assert connected.json()["connections"][0]["page_id"] == "page-123"
+        assert "page_access_token" not in connected.text
+        assert "credential" not in connected.text
 
-        removed = await client.delete("/api/v1/facebook/connection")
+        removed = await client.delete("/api/v1/facebook/connections/page-123")
         assert removed.status_code == 204
-        assert (await client.get("/api/v1/facebook/connection")).json()["state"] == "NOT_CONNECTED"
+        assert (await client.get("/api/v1/facebook/connections")).json()["connections"] == []
     finally:
         await client.aclose()
 
@@ -182,7 +186,7 @@ async def test_page_connections_require_a_session(app):
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     )
     async with anonymous:
-        assert (await anonymous.get("/api/v1/facebook/connection")).status_code == 401
+        assert (await anonymous.get("/api/v1/facebook/connections")).status_code == 401
         assert (
             await anonymous.post(
                 "/api/v1/facebook/connections/manual",
@@ -291,8 +295,8 @@ async def test_a_page_connected_elsewhere_is_refused_by_name(app):
         assert "already connected" in refused.json()["detail"]
 
         # The first workspace keeps its connection untouched.
-        still = await first.get("/api/v1/facebook/connection")
-        assert still.json()["page_id"] == "page-123"
+        still = await first.get("/api/v1/facebook/connections")
+        assert still.json()["connections"][0]["page_id"] == "page-123"
     finally:
         await first.aclose()
         await second.aclose()
@@ -311,6 +315,51 @@ async def test_reconnecting_the_same_page_in_the_same_workspace_still_works(app)
             json={"page_access_token": "valid-page-token-for-test"},
         )
         assert again.status_code == 201, again.text
+    finally:
+        await client.aclose()
+
+
+async def test_a_starter_workspace_cannot_connect_a_fourth_page(app):
+    """STARTER allows up to 3 Pages. A 4th must be refused until one is
+    disconnected, and reconnecting an already-held Page must never count
+    against the limit."""
+    client = await approved_client(app)
+    try:
+        for suffix in ("-1", "-2", "-3"):
+            connected = await client.post(
+                "/api/v1/facebook/connections/manual",
+                json={"page_access_token": f"valid-page-token-for-test{suffix}"},
+            )
+            assert connected.status_code == 201, connected.text
+
+        # Reconnecting an already-held Page is not a new one, so it must not
+        # be blocked by the limit.
+        reconnected = await client.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test-1"},
+        )
+        assert reconnected.status_code == 201, reconnected.text
+
+        refused = await client.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test-4"},
+        )
+        assert refused.status_code == 409, refused.text
+        assert "plan" in refused.json()["detail"].lower()
+
+        listed = (await client.get("/api/v1/facebook/connections")).json()
+        assert listed["plan"] == "STARTER"
+        assert listed["page_limit"] == 3
+        assert len(listed["connections"]) == 3
+
+        removed = await client.delete("/api/v1/facebook/connections/page-123-1")
+        assert removed.status_code == 204
+
+        now_fits = await client.post(
+            "/api/v1/facebook/connections/manual",
+            json={"page_access_token": "valid-page-token-for-test-4"},
+        )
+        assert now_fits.status_code == 201, now_fits.text
     finally:
         await client.aclose()
 

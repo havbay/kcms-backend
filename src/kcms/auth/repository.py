@@ -63,7 +63,7 @@ async def workspace_for_user(
     connection: asyncpg.Connection, user_id: str
 ) -> dict[str, Any] | None:
     row = await connection.fetchrow(
-        """SELECT w.id, w.name, w.is_sandbox, m.role
+        """SELECT w.id, w.name, w.is_sandbox, w.plan, m.role
            FROM membership m JOIN workspace w ON w.id = m.workspace_id
            WHERE m.user_id = $1
            -- A joined team workspace wins over the personal sandbox, so

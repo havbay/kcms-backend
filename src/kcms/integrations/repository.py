@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -5,17 +6,24 @@ import asyncpg
 
 from kcms.integrations.contracts import ProviderPage
 
+_CONNECTION_FIELDS = (
+    "external_page_id AS page_id, page_name, "
+    "connection_method AS method, tasks, connected_at, last_synced_at"
+)
+
 
 class PageAlreadyConnected(Exception):
     """The Page is connected to a different workspace.
 
     A Page belongs to one workspace so two clients cannot moderate it at once.
-    The upsert only resolves a conflict on workspace_id, so this collision
-    surfaced as an unhandled unique violation and a 500.
     """
 
 
-async def upsert_page_connection(
+class PageLimitReached(Exception):
+    """The workspace's plan does not allow another connected Page."""
+
+
+async def add_page_connection(
     connection: asyncpg.Connection,
     *,
     workspace_id: str,
@@ -34,12 +42,11 @@ async def upsert_page_connection(
         raise PageAlreadyConnected(page.page_id)
 
     row = await connection.fetchrow(
-        """INSERT INTO page_connection
-           (workspace_id, external_page_id, page_name, connection_method,
+        f"""INSERT INTO page_connection
+           (id, workspace_id, external_page_id, page_name, connection_method,
             credential_ciphertext, tasks, connected_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (workspace_id) DO UPDATE SET
-             external_page_id = EXCLUDED.external_page_id,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (workspace_id, external_page_id) DO UPDATE SET
              page_name = EXCLUDED.page_name,
              connection_method = EXCLUDED.connection_method,
              credential_ciphertext = EXCLUDED.credential_ciphertext,
@@ -48,9 +55,8 @@ async def upsert_page_connection(
              connected_at = NOW(),
              last_synced_at = NULL,
              updated_at = NOW()
-           RETURNING external_page_id AS page_id, page_name,
-                     connection_method AS method, tasks, connected_at,
-                     last_synced_at""",
+           RETURNING {_CONNECTION_FIELDS}""",
+        uuid.uuid4().hex,
         workspace_id,
         page.page_id,
         page.page_name,
@@ -62,22 +68,43 @@ async def upsert_page_connection(
     return dict(row)
 
 
-async def get_page_connection(
+async def count_page_connections(connection: asyncpg.Connection, workspace_id: str) -> int:
+    return await connection.fetchval(
+        "SELECT COUNT(*) FROM page_connection WHERE workspace_id = $1", workspace_id
+    )
+
+
+async def list_page_connections(
     connection: asyncpg.Connection, workspace_id: str
+) -> list[dict[str, Any]]:
+    rows = await connection.fetch(
+        f"""SELECT {_CONNECTION_FIELDS}
+           FROM page_connection WHERE workspace_id = $1
+           ORDER BY connected_at""",
+        workspace_id,
+    )
+    return [dict(row) for row in rows]
+
+
+async def get_page_connection(
+    connection: asyncpg.Connection, workspace_id: str, page_id: str
 ) -> dict[str, Any] | None:
     row = await connection.fetchrow(
-        """SELECT external_page_id AS page_id, page_name,
-                  connection_method AS method, tasks, connected_at,
-                  last_synced_at
-           FROM page_connection WHERE workspace_id = $1""",
+        f"""SELECT {_CONNECTION_FIELDS}
+           FROM page_connection WHERE workspace_id = $1 AND external_page_id = $2""",
         workspace_id,
+        page_id,
     )
     return dict(row) if row else None
 
 
-async def delete_page_connection(connection: asyncpg.Connection, workspace_id: str) -> bool:
+async def delete_page_connection(
+    connection: asyncpg.Connection, workspace_id: str, page_id: str
+) -> bool:
     result = await connection.execute(
-        "DELETE FROM page_connection WHERE workspace_id = $1", workspace_id
+        "DELETE FROM page_connection WHERE workspace_id = $1 AND external_page_id = $2",
+        workspace_id,
+        page_id,
     )
     return result == "DELETE 1"
 
@@ -141,22 +168,24 @@ async def delete_oauth_attempt(connection: asyncpg.Connection, state_hash: str) 
     )
 
 
-async def mark_synced(connection: asyncpg.Connection, workspace_id: str) -> None:
+async def mark_synced(connection: asyncpg.Connection, workspace_id: str, page_id: str) -> None:
     await connection.execute(
         "UPDATE page_connection SET last_synced_at = NOW(), updated_at = NOW() "
-        "WHERE workspace_id = $1",
+        "WHERE workspace_id = $1 AND external_page_id = $2",
         workspace_id,
+        page_id,
     )
 
 
-async def credential_for_workspace(
-    connection: asyncpg.Connection, workspace_id: str
+async def credential_for_page(
+    connection: asyncpg.Connection, workspace_id: str, page_id: str
 ) -> dict[str, Any] | None:
     """The stored Page credential. Kept separate from get_page_connection so
     the ciphertext is read only where it is actually needed."""
     row = await connection.fetchrow(
         "SELECT external_page_id, credential_ciphertext, tasks "
-        "FROM page_connection WHERE workspace_id = $1",
+        "FROM page_connection WHERE workspace_id = $1 AND external_page_id = $2",
         workspace_id,
+        page_id,
     )
     return dict(row) if row else None

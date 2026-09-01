@@ -588,94 +588,34 @@
         "title": "PageConnection",
         "type": "object"
       },
-      "PageConnectionState": {
+      "PageConnections": {
         "properties": {
-          "can_moderate": {
-            "default": false,
-            "title": "Can Moderate",
-            "type": "boolean"
-          },
-          "connected_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connected At"
-          },
-          "last_synced_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Synced At"
-          },
-          "method": {
-            "anyOf": [
-              {
-                "enum": [
-                  "FACEBOOK_LOGIN",
-                  "MANUAL_TOKEN"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Method"
-          },
-          "page_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Id"
-          },
-          "page_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Page Name"
-          },
-          "state": {
-            "enum": [
-              "NOT_CONNECTED",
-              "CONNECTED"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "tasks": {
+          "connections": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PageConnection"
             },
-            "title": "Tasks",
+            "title": "Connections",
             "type": "array"
+          },
+          "page_limit": {
+            "title": "Page Limit",
+            "type": "integer"
+          },
+          "plan": {
+            "enum": [
+              "STARTER",
+              "GROWTH"
+            ],
+            "title": "Plan",
+            "type": "string"
           }
         },
         "required": [
-          "state"
+          "plan",
+          "page_limit",
+          "connections"
         ],
-        "title": "PageConnectionState",
+        "title": "PageConnections",
         "type": "object"
       },
       "PilotDecision": {
@@ -2342,46 +2282,9 @@
         "summary": "Record Correction"
       }
     },
-    "/api/v1/facebook/connection": {
-      "delete": {
-        "operationId": "disconnectFacebookPage",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Disconnect"
-      },
+    "/api/v1/facebook/connections": {
       "get": {
-        "operationId": "getFacebookConnection",
+        "operationId": "listFacebookConnections",
         "parameters": [
           {
             "in": "header",
@@ -2405,7 +2308,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PageConnectionState"
+                  "$ref": "#/components/schemas/PageConnections"
                 }
               }
             },
@@ -2422,7 +2325,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Connection"
+        "summary": "List Connections"
       }
     },
     "/api/v1/facebook/connections/manual": {
@@ -2479,6 +2382,110 @@
           }
         },
         "summary": "Connect Manually"
+      }
+    },
+    "/api/v1/facebook/connections/{page_id}": {
+      "delete": {
+        "operationId": "disconnectFacebookPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect"
+      }
+    },
+    "/api/v1/facebook/connections/{page_id}/sync": {
+      "post": {
+        "description": "Pull comments from the connected Page into this workspace.\n\nRe-syncing is safe: the provider's comment id is the primary key, so an\nalready-imported comment keeps its verdict, actions and corrections.",
+        "operationId": "syncFacebookComments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "page_id",
+            "required": true,
+            "schema": {
+              "title": "Page Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Comments"
       }
     },
     "/api/v1/facebook/oauth/sessions/{state}": {
@@ -2645,53 +2652,6 @@
           }
         },
         "summary": "Start Authorization"
-      }
-    },
-    "/api/v1/facebook/sync": {
-      "post": {
-        "description": "Pull comments from the connected Page into this workspace.\n\nRe-syncing is safe: the provider's comment id is the primary key, so an\nalready-imported comment keeps its verdict, actions and corrections.",
-        "operationId": "syncFacebookComments",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SyncResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Sync Comments"
       }
     },
     "/api/v1/health": {
