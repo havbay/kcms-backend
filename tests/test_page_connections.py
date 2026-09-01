@@ -260,8 +260,11 @@ async def test_facebook_login_start_uses_the_business_login_configuration(app):
         assert started.status_code == 201, started.text
         query = parse_qs(urlparse(started.json()["authorization_url"]).query)
         assert query["config_id"] == ["business-login-config-456"]
-        assert query["scope"] == [
-            "pages_show_list,pages_read_engagement,pages_manage_engagement"
+        # A Business Login configuration carries its own permission set, so
+        # scope is left out rather than sent alongside and ignored.
+        assert "scope" not in query
+        assert query["redirect_uri"] == [
+            "https://api.example.com/api/v1/facebook/oauth/callback"
         ]
     finally:
         await client.aclose()

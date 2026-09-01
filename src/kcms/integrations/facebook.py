@@ -36,12 +36,14 @@ class GraphMetaClient:
         self._login_config_id = login_config_id
 
     def _require_oauth(self) -> None:
-        """Facebook Login needs app credentials and a redirect target. Reading
-        and moderating comments with a Page token does not, so only the login
-        flow is refused when they are absent."""
-        if not all(
-            (self._app_id, self._app_secret, self._redirect_uri, self._login_config_id)
-        ):
+        """Facebook Login needs app credentials and a redirect target.
+
+        The login configuration id is not required: it selects a Facebook Login
+        for Business configuration, and without one Meta runs classic Facebook
+        Login against the requested scopes. Demanding it refused deployments
+        that could have completed the flow.
+        """
+        if not all((self._app_id, self._app_secret, self._redirect_uri)):
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "Facebook Login is not configured on this deployment",
@@ -49,17 +51,23 @@ class GraphMetaClient:
 
     def authorization_url(self, state: str) -> str:
         self._require_oauth()
-        query = urlencode(
-            {
-                "client_id": self._app_id,
-                "redirect_uri": self._redirect_uri,
-                "state": state,
-                "scope": self._scopes,
-                "config_id": self._login_config_id,
-                "response_type": "code",
-            }
+        params = {
+            "client_id": self._app_id,
+            "redirect_uri": self._redirect_uri,
+            "state": state,
+            "response_type": "code",
+        }
+        if self._login_config_id:
+            # A Business Login configuration carries its own permission set;
+            # sending scope alongside it is ignored, so it is left out to keep
+            # the authorization screen matching the configuration.
+            params["config_id"] = self._login_config_id
+        else:
+            params["scope"] = self._scopes
+        return (
+            f"https://www.facebook.com/{self._graph_version}/dialog/oauth?"
+            + urlencode(params)
         )
-        return f"https://www.facebook.com/{self._graph_version}/dialog/oauth?{query}"
 
     async def _get(self, path: str, params: dict[str, str]) -> dict:
         url = f"https://graph.facebook.com/{self._graph_version}/{path.lstrip('/')}"

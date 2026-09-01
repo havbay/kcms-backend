@@ -271,3 +271,37 @@ async def test_other_hide_failures_are_not_disguised(monkeypatch):
     with pytest.raises(ValueError) as refused:
         await client.set_comment_hidden("c-1", "page-token", hidden=True)
     assert "190" in str(refused.value)
+
+
+def test_business_login_configuration_is_optional():
+    """config_id selects a Facebook Login for Business configuration. Without
+    one Meta runs classic login against the requested scopes, so requiring it
+    refused deployments that could have completed the flow."""
+    from urllib.parse import parse_qs, urlparse
+
+    from kcms.integrations.facebook import GraphMetaClient
+
+    classic = GraphMetaClient(
+        "v26.0", "app-1", "secret", "https://kcms.test/cb", "pages_show_list", ""
+    )
+    query = parse_qs(urlparse(classic.authorization_url("state-1")).query)
+    assert query["scope"] == ["pages_show_list"]
+    assert "config_id" not in query
+    assert query["state"] == ["state-1"]
+
+    business = GraphMetaClient(
+        "v26.0", "app-1", "secret", "https://kcms.test/cb", "pages_show_list", "cfg-9"
+    )
+    query = parse_qs(urlparse(business.authorization_url("state-2")).query)
+    assert query["config_id"] == ["cfg-9"]
+    # A configuration carries its own permissions; sending scope too is ignored.
+    assert "scope" not in query
+
+
+def test_facebook_login_without_app_credentials_fails_closed():
+    from kcms.integrations.facebook import GraphMetaClient
+
+    client = GraphMetaClient("v26.0", "", "", "", "pages_show_list", "cfg-9")
+    with pytest.raises(HTTPException) as refused:
+        client.authorization_url("state-1")
+    assert refused.value.status_code == 503
