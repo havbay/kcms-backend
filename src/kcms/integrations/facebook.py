@@ -73,9 +73,30 @@ class GraphMetaClient:
         return response.json()
 
     async def validate_page_token(self, token: str) -> ProviderPage:
-        body = await self._get(
-            "me", {"fields": "id,name,tasks", "access_token": token}
-        )
+        """Identify the Page a token belongs to, or say why it is the wrong token.
+
+        A User token also answers /me with an id and a name, so without the node
+        type a user token would be stored as though it were a Page. `tasks` is
+        requested but not required: some tokens cannot read that field, and
+        failing the whole connection over a missing capability list would be
+        worse than connecting with an empty one.
+        """
+        params = {"fields": "id,name,tasks", "metadata": "1", "access_token": token}
+        try:
+            body = await self._get("me", params)
+        except ValueError:
+            body = await self._get(
+                "me", {"fields": "id,name", "metadata": "1", "access_token": token}
+            )
+
+        node_type = str((body.get("metadata") or {}).get("type", "")).lower()
+        if node_type and node_type != "page":
+            raise ValueError(
+                "This is a User access token, not a Page access token. In Graph "
+                "API Explorer open the 'User or Page' menu and choose your Page "
+                "under Page Access Tokens, then copy the token again."
+            )
+
         page_id, page_name = body.get("id"), body.get("name")
         if not page_id or not page_name:
             raise ValueError("Meta did not identify a Facebook Page")
