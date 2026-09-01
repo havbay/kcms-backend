@@ -237,3 +237,37 @@ async def test_manage_scope_without_read_scope_is_not_moderation_capability(monk
 
     page = await client.validate_page_token("page-token")
     assert page.can_moderate is False
+
+
+async def test_hiding_the_pages_own_comment_explains_why_facebook_refuses(monkeypatch):
+    """Facebook will not let a Page hide a comment the Page itself wrote, and
+    says only "(#200) Can not hide or unhide this comment". Passed through,
+    that sends an operator to check permissions that were never the problem."""
+    client = _graph_client()
+
+    async def fake_post(path, params):
+        raise ValueError(
+            'Meta rejected the request: {"error":{"message":"(#200) Can not hide '
+            'or unhide this comment","code":200}}'
+        )
+
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    with pytest.raises(ValueError) as refused:
+        await client.set_comment_hidden("c-1", "page-token", hidden=True)
+    assert "cannot hide its own comments" in str(refused.value)
+
+
+async def test_other_hide_failures_are_not_disguised(monkeypatch):
+    """Only the Page's-own-comment case is reworded. An expired token or a
+    missing permission must keep saying so."""
+    client = _graph_client()
+
+    async def fake_post(path, params):
+        raise ValueError("Meta rejected the request: (#190) Error validating access token")
+
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    with pytest.raises(ValueError) as refused:
+        await client.set_comment_hidden("c-1", "page-token", hidden=True)
+    assert "190" in str(refused.value)

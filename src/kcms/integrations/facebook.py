@@ -282,9 +282,23 @@ class GraphMetaClient:
 
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None:
         """Hide or unhide one comment on the Page itself."""
-        await self._post(
-            comment_id, {"is_hidden": "true" if hidden else "false", "access_token": token}
-        )
+        try:
+            await self._post(
+                comment_id,
+                {"is_hidden": "true" if hidden else "false", "access_token": token},
+            )
+        except ValueError as exc:
+            # Facebook refuses to hide a comment the Page itself wrote, and
+            # reports it as a bare "(#200) Can not hide or unhide this
+            # comment". Passing that through leaves an operator checking
+            # permissions that were never the problem.
+            if "Can not hide or unhide" in str(exc):
+                raise ValueError(
+                    "Facebook will not hide this comment. A Page cannot hide "
+                    "its own comments — this one was posted by the Page rather "
+                    "than by a visitor."
+                ) from exc
+            raise
 
 
 def get_meta_client() -> MetaClient:
