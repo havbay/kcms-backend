@@ -272,3 +272,68 @@ async def test_sync_requires_authentication(app):
         assert (await client.post("/api/v1/facebook/sync")).status_code == 401
     finally:
         await client.aclose()
+
+
+async def test_removing_samples_keeps_comments_imported_from_the_page(app, meta):
+    """The delete is scoped by the sample Page id, so a real imported comment
+    must survive it. Losing those would destroy the actual moderation record."""
+    meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post("/api/v1/facebook/sync")
+        before = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        assert before["total"] > 1, "expected seeded samples alongside the imported comment"
+
+        removed = await client.request("DELETE", "/api/v1/comments/samples")
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["removed"] > 0
+
+        after = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        assert [item["comment_id"] for item in after["items"]] == ["fb-c-1"]
+        assert after["total"] == 1
+    finally:
+        await client.aclose()
+
+
+async def test_removing_samples_twice_is_harmless(app, meta):
+    client = await connected_client(app)
+    try:
+        first = await client.request("DELETE", "/api/v1/comments/samples")
+        assert first.json()["removed"] > 0
+        second = await client.request("DELETE", "/api/v1/comments/samples")
+        assert second.status_code == 200
+        assert second.json()["removed"] == 0
+    finally:
+        await client.aclose()
+
+
+async def test_a_member_cannot_empty_the_shared_workspace(app, meta):
+    """Emptying a workspace affects everyone in it, so it is an owner action."""
+    owner = await connected_client(app)
+    member = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        invitation = await owner.post("/api/v1/team/invitations", json={"role": "member"})
+        assert invitation.status_code == 201, invitation.text
+        token = invitation.json()["token"]
+
+        created = await member.post(
+            "/api/v1/auth/signup",
+            json={
+                "email": f"member-{uuid.uuid4().hex[:10]}@example.com",
+                "password": "a-long-enough-password",
+                "display_name": "Sok Dara",
+                "organization": "Joining",
+            },
+        )
+        member.headers["Authorization"] = f"Bearer {created.json()['token']}"
+        joined = await member.post(f"/api/v1/team/invitations/{token}/accept")
+        assert joined.status_code == 200, joined.text
+
+        refused = await member.request("DELETE", "/api/v1/comments/samples")
+        assert refused.status_code == 403
+
+        still_there = (await owner.get("/api/v1/comments", params={"limit": 100})).json()
+        assert still_there["total"] > 0
+    finally:
+        await owner.aclose()
+        await member.aclose()

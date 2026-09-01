@@ -953,6 +953,19 @@
         "title": "RenameWorkspace",
         "type": "object"
       },
+      "SampleRemoval": {
+        "properties": {
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "title": "SampleRemoval",
+        "type": "object"
+      },
       "SelectPage": {
         "properties": {
           "page_id": {
@@ -2081,6 +2094,53 @@
           }
         },
         "summary": "List Comments"
+      }
+    },
+    "/api/v1/comments/samples": {
+      "delete": {
+        "description": "Clear the seeded sample comments from this workspace.\n\nOnly the samples are removed: the delete is scoped by the sample Page id,\nso comments imported from a connected Facebook Page are never touched.\nEmptying a shared workspace affects everyone in it, so it is an owner\naction rather than something any member can do.",
+        "operationId": "removeSampleComments",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleRemoval"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Sample Comments"
       }
     },
     "/api/v1/comments/summary": {

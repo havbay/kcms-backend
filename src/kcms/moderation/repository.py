@@ -351,3 +351,40 @@ async def comment_page_id(
     return await connection.fetchval(
         "SELECT page_id FROM comment_content WHERE comment_id = $1", comment_id
     )
+
+
+async def delete_sample_comments(connection: asyncpg.Connection, workspace_id: str) -> int:
+    """Remove this workspace's seeded sample comments and everything about them.
+
+    Scoped by the sample Page id as well as the workspace, so a comment
+    imported from a connected Facebook Page can never be caught by it.
+
+    Verdicts, actions and corrections are append-only but they are records
+    *about* a comment. Once the comment is gone they describe nothing, so they
+    are removed with it rather than left as orphans.
+    """
+    ids = [
+        row["comment_id"]
+        for row in await connection.fetch(
+            "SELECT comment_id FROM comment_content WHERE workspace_id = $1 AND page_id = $2",
+            workspace_id,
+            PAGE_ID,
+        )
+    ]
+    if not ids:
+        return 0
+
+    async with connection.transaction():
+        for table in ("action", "verdict", "correction"):
+            await connection.execute(
+                f"DELETE FROM {table} WHERE comment_id = ANY($1::TEXT[])", ids
+            )
+        await connection.execute(
+            "DELETE FROM comment_content WHERE comment_id = ANY($1::TEXT[])", ids
+        )
+        # The sample-data notice is about these comments. With them gone it
+        # would be describing something that is no longer there.
+        await connection.execute(
+            "UPDATE workspace SET is_sandbox = FALSE WHERE id = $1", workspace_id
+        )
+    return len(ids)

@@ -72,6 +72,10 @@ class Summary(BaseModel):
     reasons: list[ReasonCount]
 
 
+class SampleRemoval(BaseModel):
+    removed: int
+
+
 class ActionRequest(BaseModel):
     kind: ActionKind
 
@@ -259,3 +263,29 @@ async def _workspace_id(connection, user: dict[str, Any]) -> str:
     if not workspace:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
     return workspace["id"]
+
+
+@router.delete(
+    "/comments/samples", operation_id="removeSampleComments", response_model=SampleRemoval
+)
+async def remove_sample_comments(
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> SampleRemoval:
+    """Clear the seeded sample comments from this workspace.
+
+    Only the samples are removed: the delete is scoped by the sample Page id,
+    so comments imported from a connected Facebook Page are never touched.
+    Emptying a shared workspace affects everyone in it, so it is an owner
+    action rather than something any member can do.
+    """
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        if workspace["role"] != "owner":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "only an owner can remove the sample comments"
+            )
+        removed = await repository.delete_sample_comments(connection, workspace["id"])
+    return SampleRemoval(removed=removed)
