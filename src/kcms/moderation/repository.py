@@ -9,7 +9,7 @@ import asyncpg
 
 from kcms.integrations.contracts import ProviderComment
 from kcms.moderation.contracts import CommentContext
-from kcms.moderation.pattern_matcher import PatternMatcher
+from kcms.moderation.pattern_matcher import PatternMatcher, auto_removable
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 
 # Once a workspace connects a Page, the queue is that Page's comments. The
@@ -163,6 +163,11 @@ async def fetch_work_list(
     elif review_status == "ACTIONED":
         conditions.append("a.kind IS NOT NULL")
 
+    # Safe comments are stored for the record but never queued: a moderator
+    # reviewing them is a moderator not reviewing the ones that matter. Only a
+    # verdict of "cleared" is excluded — an abstention still needs a human.
+    conditions.append("v.surfaced_reason <> 'cleared'")
+
     where = " WHERE " + " AND ".join(conditions) + CONNECTED_PAGE_ONLY
     order = {
         "NEWEST": "c.posted_at DESC, c.comment_id",
@@ -212,8 +217,7 @@ async def summarise_workspace(
                   AND a.kind IS NULL
             ) AS pending,
             COUNT(*) FILTER (WHERE a.kind = 'LEAVE') AS left_visible,
-            COUNT(*) FILTER (WHERE a.kind = 'HIDE') AS hidden,
-            COUNT(*) FILTER (WHERE a.kind = 'UNHIDE') AS unhidden
+            COUNT(*) FILTER (WHERE a.kind = 'DELETE') AS deleted
         FROM comment_content c
         LEFT JOIN latest_verdict v ON v.comment_id = c.comment_id
         LEFT JOIN latest_action a ON a.comment_id = c.comment_id
@@ -315,15 +319,19 @@ async def ingest_provider_comments(
     workspace_id: str,
     page_id: str,
     comments: Sequence[ProviderComment],
-) -> int:
+) -> tuple[int, list[str]]:
     """Store comments pulled from the provider and classify the new ones.
 
     The provider's own comment id is the primary key, so re-syncing the same
     Page is idempotent: an existing comment is skipped rather than duplicated,
     and its verdict, actions and corrections survive the next sync.
+
+    Returns the number imported and the comment ids the auto-removal policy
+    selected. Mirroring those to Facebook is the caller's job: this function
+    owns the database, not the network.
     """
     if not comments:
-        return 0
+        return 0, []
 
     existing = {
         row["comment_id"]
@@ -334,7 +342,7 @@ async def ingest_provider_comments(
     }
     fresh = [c for c in comments if c.comment_id not in existing]
     if not fresh:
-        return 0
+        return 0, []
 
     contexts = [
         CommentContext(
@@ -346,8 +354,10 @@ async def ingest_provider_comments(
         )
         for c in fresh
     ]
-    verdicts = await PatternMatcher().classify(contexts)
+    matcher = await _matcher_for(connection, workspace_id)
+    verdicts = await matcher.classify(contexts)
 
+    auto_removed: list[str] = []
     async with connection.transaction():
         for comment, verdict in zip(fresh, verdicts, strict=True):
             await connection.execute(
@@ -369,7 +379,14 @@ async def ingest_provider_comments(
                 verdict.target.value, verdict.target_confidence, verdict.abstain,
                 verdict.surfaced_reason.value, verdict.rationale, verdict.model_version,
             )
-    return len(fresh)
+            if auto_removable(verdict):
+                # Recorded before the provider call so the decision survives a
+                # Graph failure: provider_applied is set once it lands.
+                await record_action(
+                    connection, comment.comment_id, "DELETE", "system:auto-removal"
+                )
+                auto_removed.append(comment.comment_id)
+    return len(fresh), auto_removed
 
 
 async def comment_page_id(
@@ -437,4 +454,84 @@ async def count_sample_comments(connection: asyncpg.Connection, workspace_id: st
             PAGE_ID,
         )
         or 0
+    )
+
+
+# ---- Workspace keywords ---------------------------------------------------
+# Scoped to a workspace throughout. There is no platform-wide write path: the
+# shipped JSON is a read-only starting set, and everything a client adds is
+# theirs alone.
+
+
+async def list_workspace_keywords(
+    connection: asyncpg.Connection, workspace_id: str
+) -> list[dict[str, Any]]:
+    rows = await connection.fetch(
+        """SELECT keyword, severity, note, created_at
+           FROM workspace_keyword WHERE workspace_id = $1
+           ORDER BY created_at DESC, id DESC""",
+        workspace_id,
+    )
+    return [dict(row) for row in rows]
+
+
+async def add_workspace_keyword(
+    connection: asyncpg.Connection,
+    workspace_id: str,
+    keyword: str,
+    severity: str,
+    note: str | None,
+    created_by: str | None,
+) -> dict[str, Any] | None:
+    """Append one keyword. Returns None when the workspace already has it,
+    which the route reports as a conflict rather than as a silent success."""
+    row = await connection.fetchrow(
+        """INSERT INTO workspace_keyword (workspace_id, keyword, severity, note, created_by)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING
+           RETURNING keyword, severity, note, created_at""",
+        workspace_id, keyword.strip(), severity, note, created_by,
+    )
+    return dict(row) if row else None
+
+
+async def remove_workspace_keyword(
+    connection: asyncpg.Connection, workspace_id: str, keyword: str
+) -> bool:
+    result = await connection.execute(
+        """DELETE FROM workspace_keyword
+           WHERE workspace_id = $1 AND lower(btrim(keyword)) = lower(btrim($2))""",
+        workspace_id, keyword,
+    )
+    return result.endswith("1")
+
+
+async def _matcher_for(
+    connection: asyncpg.Connection, workspace_id: str
+) -> PatternMatcher:
+    """A matcher carrying this workspace's own vocabulary on top of the
+    shipped defaults."""
+    rows = await connection.fetch(
+        "SELECT keyword, severity FROM workspace_keyword WHERE workspace_id = $1",
+        workspace_id,
+    )
+    return PatternMatcher([(r["keyword"], r["severity"]) for r in rows])
+
+
+async def mark_action_applied(
+    connection: asyncpg.Connection, comment_id: str, kind: str
+) -> None:
+    """Flip the most recent action of this kind to provider_applied.
+
+    Written after the Graph call returns, so "recorded" and "actually reached
+    Facebook" stay distinguishable when the call fails.
+    """
+    await connection.execute(
+        """UPDATE action SET provider_applied = TRUE
+           WHERE id = (
+               SELECT id FROM action
+               WHERE comment_id = $1 AND kind = $2
+               ORDER BY occurred_at DESC, id DESC LIMIT 1
+           )""",
+        comment_id, kind,
     )

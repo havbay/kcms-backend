@@ -34,7 +34,7 @@ class RecordingMetaClient:
     """Records what reached Facebook so a test can prove it happened."""
 
     def __init__(self):
-        self.hidden: list[tuple[str, bool]] = []
+        self.deleted: list[str] = []
         self.comments: list[ProviderComment] = []
         self.refuse = False
 
@@ -60,9 +60,12 @@ class RecordingMetaClient:
         return list(self.comments)
 
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None:
+        raise AssertionError("hiding is no longer part of the moderation policy")
+
+    async def delete_comment(self, comment_id: str, token: str) -> None:
         if self.refuse:
             raise ValueError("Meta rejected the request: permission missing")
-        self.hidden.append((comment_id, hidden))
+        self.deleted.append(comment_id)
 
 
 def provider_comment(comment_id: str, text: str) -> ProviderComment:
@@ -179,7 +182,7 @@ async def test_resyncing_the_same_page_does_not_duplicate_or_reset_a_comment(app
         assert first.json()["imported"] == 1
 
         acted = await client.post(
-            "/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"}
+            "/api/v1/comments/fb-c-1/actions", json={"kind": "DELETE"}
         )
         assert acted.status_code == 201, acted.text
 
@@ -192,24 +195,20 @@ async def test_resyncing_the_same_page_does_not_duplicate_or_reset_a_comment(app
         listed = await client.get("/api/v1/comments", params={"query": "សេវាកម្មនេះយឺត"})
         assert listed.json()["total"] == 1
         # The action survived the re-sync rather than being wiped by re-import.
-        assert listed.json()["items"][0]["latest_action"] == "HIDE"
+        assert listed.json()["items"][0]["latest_action"] == "DELETE"
     finally:
         await client.aclose()
 
 
-async def test_hiding_a_page_comment_is_applied_on_facebook(app, meta):
+async def test_deleting_a_page_comment_is_applied_on_facebook(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)
     try:
         await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
 
-        hidden = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
-        assert hidden.status_code == 201, hidden.text
-        assert meta.hidden == [("fb-c-1", True)]
-
-        shown = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "UNHIDE"})
-        assert shown.status_code == 201, shown.text
-        assert meta.hidden == [("fb-c-1", True), ("fb-c-1", False)]
+        removed = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "DELETE"})
+        assert removed.status_code == 201, removed.text
+        assert meta.deleted == ["fb-c-1"]
     finally:
         await client.aclose()
 
@@ -221,14 +220,14 @@ async def test_leaving_a_comment_visible_never_calls_facebook(app, meta):
         await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         left = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "LEAVE"})
         assert left.status_code == 201
-        assert meta.hidden == []
+        assert meta.deleted == []
     finally:
         await client.aclose()
 
 
-async def test_hiding_a_seeded_sample_comment_never_calls_facebook(app, meta):
-    """Sample comments are not on the connected Page, so hiding one must not
-    send a hide for an id Facebook does not know."""
+async def test_deleting_a_seeded_sample_comment_never_calls_facebook(app, meta):
+    """Sample comments are not on the connected Page, so deleting one must not
+    send a delete for an id Facebook does not know."""
     client = await connected_client(app)
     try:
         workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
@@ -240,15 +239,15 @@ async def test_hiding_a_seeded_sample_comment_never_calls_facebook(app, meta):
             )
         assert seeded_id, "expected the workspace to have seeded samples"
         acted = await client.post(
-            f"/api/v1/comments/{seeded_id}/actions", json={"kind": "HIDE"}
+            f"/api/v1/comments/{seeded_id}/actions", json={"kind": "DELETE"}
         )
         assert acted.status_code == 201, acted.text
-        assert meta.hidden == []
+        assert meta.deleted == []
     finally:
         await client.aclose()
 
 
-async def test_a_refused_facebook_hide_records_no_action(app, meta):
+async def test_a_refused_facebook_delete_records_no_action(app, meta):
     """An Action records what happened to the comment. If Facebook refuses,
     nothing happened, so no Action may remain."""
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
@@ -257,7 +256,7 @@ async def test_a_refused_facebook_hide_records_no_action(app, meta):
         await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
         meta.refuse = True
 
-        failed = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
+        failed = await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "DELETE"})
         assert failed.status_code == 502, failed.text
 
         listed = await client.get("/api/v1/comments", params={"query": "សេវាកម្មនេះយឺត"})
@@ -415,12 +414,12 @@ async def test_a_workspace_with_no_connection_still_sees_its_samples(app, meta):
         listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
         assert listed["total"] > 0
         summary = (await client.get("/api/v1/comments/summary")).json()
-        assert summary["processed"] == listed["total"]
+        assert summary["need_review"] == listed["total"]
     finally:
         await client.aclose()
 
 
-async def test_a_hide_that_reached_facebook_is_distinguishable_from_one_that_did_not(app, meta):
+async def test_a_delete_that_reached_facebook_is_distinguishable_from_one_that_did_not(app, meta):
     """A moderator must be able to tell a hide that changed Facebook from one
     that only changed KCMS. Both looked identical before, so hiding a sample
     read as a successful moderation."""
@@ -428,18 +427,18 @@ async def test_a_hide_that_reached_facebook_is_distinguishable_from_one_that_did
     client = await connected_client(app)
     try:
         await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
-        await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "HIDE"})
+        await client.post("/api/v1/comments/fb-c-1/actions", json={"kind": "DELETE"})
 
         listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
         row = next(i for i in listed["items"] if i["comment_id"] == "fb-c-1")
-        assert row["latest_action"] == "HIDE"
+        assert row["latest_action"] == "DELETE"
         assert row["latest_action_on_facebook"] is True
-        assert meta.hidden == [("fb-c-1", True)]
+        assert meta.deleted == ["fb-c-1"]
     finally:
         await client.aclose()
 
 
-async def test_a_sample_hide_is_marked_as_not_reaching_facebook(app, meta):
+async def test_a_sample_delete_is_marked_as_not_reaching_facebook(app, meta):
     """The workspace has no connection, so nothing can reach Facebook. The row
     must say so rather than showing the same status as a real hide."""
     client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
@@ -458,14 +457,14 @@ async def test_a_sample_hide_is_marked_as_not_reaching_facebook(app, meta):
         listed = (await client.get("/api/v1/comments", params={"limit": 1})).json()
         sample_id = listed["items"][0]["comment_id"]
         acted = await client.post(
-            f"/api/v1/comments/{sample_id}/actions", json={"kind": "HIDE"}
+            f"/api/v1/comments/{sample_id}/actions", json={"kind": "DELETE"}
         )
         assert acted.status_code == 201
 
         again = (await client.get("/api/v1/comments", params={"limit": 100})).json()
         row = next(i for i in again["items"] if i["comment_id"] == sample_id)
-        assert row["latest_action"] == "HIDE"
+        assert row["latest_action"] == "DELETE"
         assert row["latest_action_on_facebook"] is False
-        assert meta.hidden == []
+        assert meta.deleted == []
     finally:
         await client.aclose()

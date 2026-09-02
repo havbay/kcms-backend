@@ -14,7 +14,8 @@ from kcms.shared.database import database
 
 router = APIRouter(prefix="/api/v1")
 
-ActionKind = Literal["LEAVE", "HIDE", "UNHIDE"]
+# A reviewer has two choices: take the comment down, or let it stand.
+ActionKind = Literal["LEAVE", "DELETE"]
 SeverityLabel = Literal["SAFE", "OFFENSIVE", "HARMFUL"]
 TargetLabel = Literal["PERSON", "INSTITUTION", "NEITHER"]
 
@@ -68,8 +69,7 @@ class Summary(BaseModel):
     reviewed: int
     pending: int
     left_visible: int
-    hidden: int
-    unhidden: int
+    deleted: int
     reasons: list[ReasonCount]
 
 
@@ -174,10 +174,13 @@ async def record_action(
     """Records a moderation Action. Actions are append-only and reversible,
     and never become training labels.
 
-    When the comment came from a connected Facebook Page, HIDE and UNHIDE are
-    applied on Facebook as well. The Action row and the Facebook state are
-    written together: if Facebook refuses, the row is rolled back, because an
-    Action records what actually happened to the comment.
+    When the comment came from a connected Facebook Page, DELETE is applied on
+    Facebook as well. The Action row and the Facebook state are written
+    together: if Facebook refuses, the row is rolled back, because an Action
+    records what actually happened to the comment.
+
+    DELETE is irreversible on Facebook's side. LEAVE changes nothing there and
+    exists so that a decision to allow a comment is still recorded.
     """
     _require_database()
     async with database.acquire() as connection:
@@ -205,10 +208,9 @@ async def record_action(
                         "is not configured on this deployment",
                     )
                 try:
-                    await meta.set_comment_hidden(
+                    await meta.delete_comment(
                         comment_id,
                         cipher.open(mirror["credential_ciphertext"]),
-                        hidden=body.kind == "HIDE",
                     )
                 except ValueError as exc:
                     raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
@@ -225,7 +227,7 @@ async def _provider_credential(
     Returns None for LEAVE, and for seeded sample comments, whose page_id is
     the sandbox Page rather than a connected one.
     """
-    if kind not in ("HIDE", "UNHIDE"):
+    if kind != "DELETE":
         return None
     page_id = await repository.comment_page_id(connection, comment_id)
     if not page_id:

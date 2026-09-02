@@ -103,7 +103,7 @@ async def test_a_rename_does_not_rewrite_who_took_past_actions(owner):
     """The audit trail records who acted under the name used at the time.
     Rewriting it would let someone quietly disown a decision."""
     comment_id = (await owner.get("/api/v1/comments")).json()["items"][0]["comment_id"]
-    await owner.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "HIDE"})
+    await owner.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "LEAVE"})
 
     await owner.patch("/api/v1/settings/me", json={"display_name": "Someone Else"})
 

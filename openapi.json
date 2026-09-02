@@ -6,8 +6,7 @@
           "kind": {
             "enum": [
               "LEAVE",
-              "HIDE",
-              "UNHIDE"
+              "DELETE"
             ],
             "title": "Kind",
             "type": "string"
@@ -405,6 +404,90 @@
           "workspace_name"
         ],
         "title": "JoinedWorkspace",
+        "type": "object"
+      },
+      "KeywordCreate": {
+        "properties": {
+          "keyword": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Keyword",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 280,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "severity": {
+            "enum": [
+              "HARMFUL",
+              "OFFENSIVE"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "keyword",
+          "severity"
+        ],
+        "title": "KeywordCreate",
+        "type": "object"
+      },
+      "KeywordEntry": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "keyword": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Keyword",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 280,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "severity": {
+            "enum": [
+              "HARMFUL",
+              "OFFENSIVE"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "keyword",
+          "severity"
+        ],
+        "title": "KeywordEntry",
         "type": "object"
       },
       "ManualPageConnection": {
@@ -1016,8 +1099,8 @@
       "Summary": {
         "description": "Counts computed across the whole workspace, not from one page.",
         "properties": {
-          "hidden": {
-            "title": "Hidden",
+          "deleted": {
+            "title": "Deleted",
             "type": "integer"
           },
           "left_visible": {
@@ -1046,10 +1129,6 @@
           "reviewed": {
             "title": "Reviewed",
             "type": "integer"
-          },
-          "unhidden": {
-            "title": "Unhidden",
-            "type": "integer"
           }
         },
         "required": [
@@ -1058,8 +1137,7 @@
           "reviewed",
           "pending",
           "left_visible",
-          "hidden",
-          "unhidden",
+          "deleted",
           "reasons"
         ],
         "title": "Summary",
@@ -2148,7 +2226,7 @@
     },
     "/api/v1/comments/{comment_id}/actions": {
       "post": {
-        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, HIDE and UNHIDE are\napplied on Facebook as well. The Action row and the Facebook state are\nwritten together: if Facebook refuses, the row is rolled back, because an\nAction records what actually happened to the comment.",
+        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, DELETE is applied on\nFacebook as well. The Action row and the Facebook state are written\ntogether: if Facebook refuses, the row is rolled back, because an Action\nrecords what actually happened to the comment.\n\nDELETE is irreversible on Facebook's side. LEAVE changes nothing there and\nexists so that a decision to allow a comment is still recorded.",
         "operationId": "recordAction",
         "parameters": [
           {
@@ -2764,6 +2842,159 @@
           }
         },
         "summary": "Get Settings"
+      }
+    },
+    "/api/v1/settings/keywords": {
+      "get": {
+        "description": "This workspace's own keywords. Never another workspace's, and never the\nshipped defaults: those are not editable and not listed as if they were.",
+        "operationId": "getKeywords",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KeywordEntry"
+                  },
+                  "title": "Response Getkeywords",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Keywords"
+      },
+      "post": {
+        "operationId": "addKeyword",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeywordEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Keyword"
+      }
+    },
+    "/api/v1/settings/keywords/{keyword}": {
+      "delete": {
+        "operationId": "removeKeyword",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "keyword",
+            "required": true,
+            "schema": {
+              "title": "Keyword",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Keyword"
       }
     },
     "/api/v1/settings/me": {
