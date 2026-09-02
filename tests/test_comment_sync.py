@@ -153,6 +153,24 @@ async def test_sync_imports_page_comments_into_the_work_list(app, meta):
         await client.aclose()
 
 
+async def test_connected_page_summary_excludes_seeded_sample_reasons(app, meta):
+    """Every Overview figure must describe the same connected-Page queue."""
+    meta.comments = [
+        provider_comment("fb-summary-1", "អ្នកនេះល្ងង់ណាស់ កុំឱ្យវានិយាយ។"),
+        provider_comment("fb-summary-2", "អរគុណច្រើន សេវាកម្មល្អ"),
+    ]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+
+        summary = (await client.get("/api/v1/comments/summary")).json()
+
+        assert summary["processed"] == 2
+        assert sum(row["count"] for row in summary["reasons"]) == summary["need_review"]
+    finally:
+        await client.aclose()
+
+
 async def test_resyncing_the_same_page_does_not_duplicate_or_reset_a_comment(app, meta):
     meta.comments = [provider_comment("fb-c-1", "សេវាកម្មនេះយឺតណាស់")]
     client = await connected_client(app)

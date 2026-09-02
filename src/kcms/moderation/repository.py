@@ -19,7 +19,9 @@ from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 CONNECTED_PAGE_ONLY = """
     AND (
         NOT EXISTS (SELECT 1 FROM page_connection pc WHERE pc.workspace_id = $1)
-        OR c.page_id = (SELECT external_page_id FROM page_connection WHERE workspace_id = $1)
+        OR c.page_id IN (
+            SELECT external_page_id FROM page_connection WHERE workspace_id = $1
+        )
     )
 """
 
@@ -227,6 +229,14 @@ async def summarise_workspace(
             FROM verdict v
             JOIN comment_content c ON c.comment_id = v.comment_id
             WHERE c.workspace_id = $1
+              AND (
+                  NOT EXISTS (
+                      SELECT 1 FROM page_connection pc WHERE pc.workspace_id = $1
+                  )
+                  OR c.page_id IN (
+                      SELECT external_page_id FROM page_connection WHERE workspace_id = $1
+                  )
+              )
             ORDER BY v.comment_id, v.occurred_at DESC, v.id DESC
         )
         SELECT surfaced_reason, COUNT(*) AS count
