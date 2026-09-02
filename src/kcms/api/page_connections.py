@@ -372,11 +372,23 @@ async def sync_comments(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     async with database.acquire() as connection:
-        imported = await moderation_repository.ingest_provider_comments(
+        imported, auto_removed = await moderation_repository.ingest_provider_comments(
             connection, workspace["id"], stored["external_page_id"], comments
         )
         await repository.mark_synced(connection, workspace["id"], page_id)
         refreshed = await repository.get_page_connection(connection, workspace["id"], page_id)
+
+    # Harmful comments are deleted from the Page without waiting for a reviewer.
+    # A Graph failure is not fatal to the sync: the action is already recorded,
+    # provider_applied stays false, and the comment is still in the queue for a
+    # human to action by hand.
+    for comment_id in auto_removed:
+        try:
+            await meta.delete_comment(comment_id, token)
+        except Exception:
+            continue
+        async with database.acquire() as connection:
+            await moderation_repository.mark_action_applied(connection, comment_id, "DELETE")
 
     return SyncResult(
         fetched=len(comments),

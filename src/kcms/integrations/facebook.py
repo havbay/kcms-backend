@@ -17,6 +17,8 @@ class MetaClient(Protocol):
     async def fetch_comments(self, page_id: str, token: str) -> list[ProviderComment]: ...
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None: ...
 
+    async def delete_comment(self, comment_id: str, token: str) -> None: ...
+
 
 class GraphMetaClient:
     def __init__(
@@ -172,6 +174,17 @@ class GraphMetaClient:
         return pages
 
 
+    async def _delete(self, path: str, params: dict[str, str]) -> dict:
+        url = f"https://graph.facebook.com/{self._graph_version}/{path.lstrip('/')}"
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.delete(url, params=params)
+        except httpx.RequestError as exc:
+            raise ValueError("Meta could not be reached") from exc
+        if response.status_code != 200:
+            raise ValueError(f"Meta rejected the request: {response.text[:200]}")
+        return response.json()
+
     async def _post(self, path: str, params: dict[str, str]) -> dict:
         url = f"https://graph.facebook.com/{self._graph_version}/{path.lstrip('/')}"
         try:
@@ -306,6 +319,23 @@ class GraphMetaClient:
                     "its own comments — this one was posted by the Page rather "
                     "than by a visitor."
                 ) from exc
+            raise
+
+
+    async def delete_comment(self, comment_id: str, token: str) -> None:
+        """Remove one comment from the Page permanently.
+
+        There is no undo: unlike hiding, nothing on Facebook's side keeps the
+        text. The action row in KCMS is the only record left that it existed,
+        which is why the action is written before this call is made.
+        """
+        try:
+            await self._delete(comment_id, {"access_token": token})
+        except ValueError as exc:
+            # A comment already gone is the outcome the caller wanted, so a
+            # missing object is not reported as a failure.
+            if "does not exist" in str(exc) or "Unsupported get request" in str(exc):
+                return
             raise
 
 

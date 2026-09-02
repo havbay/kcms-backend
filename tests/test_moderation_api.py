@@ -62,7 +62,7 @@ async def test_moderation_requires_a_session(client):
     async with anonymous:
         assert (await anonymous.get("/api/v1/comments")).status_code == 401
         assert (
-            await anonymous.post("/api/v1/comments/any-id/actions", json={"kind": "HIDE"})
+            await anonymous.post("/api/v1/comments/any-id/actions", json={"kind": "DELETE"})
         ).status_code == 401
 
 
@@ -90,7 +90,7 @@ async def test_correction_records_the_model_version_it_disagrees_with(client):
     assert body["disagrees_with_model"] == "pattern-matching-v0.1"
 
 
-async def test_hiding_a_comment_writes_no_correction(client):
+async def test_deleting_a_comment_writes_no_correction(client):
     """The single most important invariant in the system.
 
     If actions became labels, the model would drift toward suppression while
@@ -101,13 +101,15 @@ async def test_hiding_a_comment_writes_no_correction(client):
     row = next(i for i in before.json()["items"] if i["comment_id"] == comment_id)
     correction_before = row["corrected_severity"]
 
-    hide = await client.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "HIDE"})
-    assert hide.status_code == 201
+    removed = await client.post(
+        f"/api/v1/comments/{comment_id}/actions", json={"kind": "DELETE"}
+    )
+    assert removed.status_code == 201
 
     after = await client.get("/api/v1/comments")
     row_after = next(i for i in after.json()["items"] if i["comment_id"] == comment_id)
 
-    assert row_after["latest_action"] == "HIDE"
+    assert row_after["latest_action"] == "DELETE"
     assert row_after["corrected_severity"] == correction_before, (
         "hiding a comment must not create or change a Correction"
     )
@@ -154,7 +156,7 @@ async def test_each_account_gets_its_own_isolated_workspace():
             alice_items = (await alice.get("/api/v1/comments")).json()["items"]
             bob_items = (await bob.get("/api/v1/comments")).json()["items"]
 
-            assert len(alice_items) == len(bob_items) == 12
+            assert len(alice_items) == len(bob_items) == 11
             # Same sample text, different rows.
             assert {i["comment_id"] for i in alice_items}.isdisjoint(
                 {i["comment_id"] for i in bob_items}
@@ -162,7 +164,7 @@ async def test_each_account_gets_its_own_isolated_workspace():
 
             alice_id = alice_items[0]["comment_id"]
             assert (
-                await alice.post(f"/api/v1/comments/{alice_id}/actions", json={"kind": "HIDE"})
+                await alice.post(f"/api/v1/comments/{alice_id}/actions", json={"kind": "DELETE"})
             ).status_code == 201
 
             # Bob must not see Alice's action...
@@ -171,7 +173,7 @@ async def test_each_account_gets_its_own_isolated_workspace():
 
             # ...nor be able to act on her comment by guessing its id.
             assert (
-                await bob.post(f"/api/v1/comments/{alice_id}/actions", json={"kind": "UNHIDE"})
+                await bob.post(f"/api/v1/comments/{alice_id}/actions", json={"kind": "LEAVE"})
             ).status_code == 404
             assert (
                 await bob.post(
@@ -189,7 +191,7 @@ async def test_the_work_list_is_paginated(client):
     worked because the data was seeded."""
     first = (await client.get("/api/v1/comments?limit=5&offset=0")).json()
     assert len(first["items"]) == 5
-    assert first["total"] == 12
+    assert first["total"] == 11
     assert first["limit"] == 5 and first["offset"] == 0
 
     second = (await client.get("/api/v1/comments?limit=5&offset=5")).json()
@@ -200,7 +202,7 @@ async def test_the_work_list_is_paginated(client):
     )
 
     last = (await client.get("/api/v1/comments?limit=5&offset=10")).json()
-    assert len(last["items"]) == 2
+    assert len(last["items"]) == 1
 
 
 async def test_work_list_exposes_source_post_and_reply_context(client):
@@ -242,7 +244,7 @@ async def test_work_list_can_filter_pending_and_actioned_comments(client):
     assert actioned["total"] >= 1
     assert all(item["latest_action"] is not None for item in actioned["items"])
     assert all(item["latest_action"] is None for item in pending["items"])
-    assert actioned["total"] + pending["total"] == 12
+    assert actioned["total"] + pending["total"] == 11
 
 
 async def test_an_absurd_page_size_is_rejected(client):
@@ -266,8 +268,8 @@ async def test_the_summary_reflects_actions_taken(client):
     comment_id = (await client.get("/api/v1/comments")).json()["items"][0]["comment_id"]
     before = (await client.get("/api/v1/comments/summary")).json()
 
-    await client.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "HIDE"})
+    await client.post(f"/api/v1/comments/{comment_id}/actions", json={"kind": "DELETE"})
 
     after = (await client.get("/api/v1/comments/summary")).json()
     assert after["reviewed"] == before["reviewed"] + 1
-    assert after["hidden"] == before["hidden"] + 1
+    assert after["deleted"] == before["deleted"] + 1
