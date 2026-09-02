@@ -19,7 +19,7 @@ class SeedComment:
     author_ref: str
     text: str
     post_text: str | None = (
-        "វីដេអូថ្មី៖ សូមចែករំលែកមតិយោបល់របស់អ្នកអំពីសេវាកម្មរបស់យើង។"
+        "សូមចែករំលែកមតិយោបល់របស់អ្នកអំពីសេវាកម្មរបស់យើង។"
     )
     parent_text: str | None = None
     is_reply: bool = False
