@@ -3491,6 +3491,46 @@
         },
         "summary": "Remove Member"
       }
+    },
+    "/api/v1/team/membership": {
+      "delete": {
+        "description": "Leave the workspace you are currently in.\n\nRemoving a member is an owner action, which left anyone who joined a\nworkspace unable to get out of it without asking the person who owns it.\nThat is the wrong shape: a workspace holds another company's real Facebook\ncomments, and someone who wants no further part in it should not need\npermission to stop.\n\nThe last owner still cannot leave. A workspace nobody can administer is\nunrecoverable through the product, so that guard is the same one that\nprotects removing a member.",
+        "operationId": "leaveWorkspace",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Leave Workspace"
+      }
     }
   }
 }

@@ -191,3 +191,36 @@ async def remove_member(
             status.HTTP_409_CONFLICT,
             "the last owner cannot be removed; promote someone else first",
         )
+
+
+@router.delete(
+    "/membership",
+    operation_id="leaveWorkspace",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def leave_workspace(
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> None:
+    """Leave the workspace you are currently in.
+
+    Removing a member is an owner action, which left anyone who joined a
+    workspace unable to get out of it without asking the person who owns it.
+    That is the wrong shape: a workspace holds another company's real Facebook
+    comments, and someone who wants no further part in it should not need
+    permission to stop.
+
+    The last owner still cannot leave. A workspace nobody can administer is
+    unrecoverable through the product, so that guard is the same one that
+    protects removing a member.
+    """
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await _membership(connection, user)
+        problem = await repository.remove_member(connection, workspace["id"], user["id"])
+    if problem == "LAST_OWNER":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "you are the last owner of this workspace; promote someone else before leaving",
+        )
+    if problem == "NOT_FOUND":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "you are not a member of this workspace")

@@ -220,3 +220,59 @@ async def test_an_owner_can_be_removed_once_another_owner_exists(app, owner):
 
 async def test_removing_someone_who_is_not_a_member_is_a_404(owner):
     assert (await owner.delete("/api/v1/team/members/nobody")).status_code == 404
+
+
+async def test_a_member_can_leave_and_lands_back_in_their_own_workspace(app):
+    """Removing a member is an owner action, which left anyone who joined
+    unable to get out without asking the owner. Leaving must not need
+    permission from the person you are leaving."""
+    owner = await sign_up(app, "Rin Layheang")
+    joiner = await sign_up(app, "Nara Chhuon")
+    try:
+        own_before = (await joiner.get("/api/v1/settings")).json()["workspace_id"]
+
+        invitation = await owner.post("/api/v1/team/invitations", json={"role": "member"})
+        token = invitation.json()["token"]
+        joined = await joiner.post(f"/api/v1/team/invitations/{token}/accept")
+        assert joined.status_code == 200, joined.text
+
+        inside = (await joiner.get("/api/v1/settings")).json()
+        assert inside["workspace_id"] != own_before, "expected to be in the joined workspace"
+
+        left = await joiner.request("DELETE", "/api/v1/team/membership")
+        assert left.status_code == 204, left.text
+
+        # Their own workspace was never deleted, only outranked while they were
+        # in someone else's. Leaving brings it back.
+        after = (await joiner.get("/api/v1/settings")).json()
+        assert after["workspace_id"] == own_before
+
+        # And they are gone from the workspace they left.
+        team = (await owner.get("/api/v1/team")).json()
+        assert all(m["display_name"] != "Nara Chhuon" for m in team["members"])
+    finally:
+        await owner.aclose()
+        await joiner.aclose()
+
+
+async def test_the_last_owner_cannot_leave_and_strand_a_workspace(app):
+    owner = await sign_up(app, "Sole Owner")
+    try:
+        refused = await owner.request("DELETE", "/api/v1/team/membership")
+        assert refused.status_code == 409, refused.text
+        assert "last owner" in refused.json()["detail"]
+
+        # Still there, still able to administer it.
+        assert (await owner.get("/api/v1/team")).status_code == 200
+    finally:
+        await owner.aclose()
+
+
+async def test_leaving_needs_a_session(app):
+    import httpx
+
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    try:
+        assert (await client.request("DELETE", "/api/v1/team/membership")).status_code == 401
+    finally:
+        await client.aclose()
