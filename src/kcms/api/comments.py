@@ -15,7 +15,7 @@ from kcms.shared.database import database
 router = APIRouter(prefix="/api/v1")
 
 # A reviewer has two choices: take the comment down, or let it stand.
-ActionKind = Literal["LEAVE", "DELETE"]
+ActionKind = Literal["LEAVE", "HIDE", "UNHIDE", "DELETE"]
 SeverityLabel = Literal["SAFE", "OFFENSIVE", "HARMFUL"]
 TargetLabel = Literal["PERSON", "INSTITUTION", "NEITHER"]
 
@@ -118,9 +118,11 @@ async def list_comments(
     query: Annotated[str | None, Query(max_length=200)] = None,
     severity: Annotated[SeverityLabel | None, Query()] = None,
     target: Annotated[TargetLabel | None, Query()] = None,
+    # "cleared" is deliberately absent: the work list excludes cleared rows
+    # before any filter applies, so offering it advertised a value that could
+    # never return a row.
     surfaced_reason: Annotated[
-        Literal["triage", "institution_sample", "novel_language", "uncertainty", "cleared"]
-        | None,
+        Literal["triage", "institution_sample", "novel_language", "uncertainty"] | None,
         Query(),
     ] = None,
     review_status: Annotated[Literal["PENDING", "ACTIONED"] | None, Query()] = None,
@@ -174,13 +176,16 @@ async def record_action(
     """Records a moderation Action. Actions are append-only and reversible,
     and never become training labels.
 
-    When the comment came from a connected Facebook Page, DELETE is applied on
-    Facebook as well. The Action row and the Facebook state are written
-    together: if Facebook refuses, the row is rolled back, because an Action
-    records what actually happened to the comment.
+    When the comment came from a connected Facebook Page, HIDE, UNHIDE and
+    DELETE are applied on Facebook as well. The Action row and the Facebook
+    state are written together: if Facebook refuses, the row is rolled back,
+    because an Action records what actually happened to the comment.
 
-    DELETE is irreversible on Facebook's side. LEAVE changes nothing there and
-    exists so that a decision to allow a comment is still recorded.
+    HIDE is reversible through UNHIDE and is the option to reach for when the
+    classifier's judgement is uncertain. DELETE cannot be undone on Facebook.
+    LEAVE changes nothing there and exists so that a decision to allow a
+    comment is still recorded, which is a different fact from nobody having
+    looked.
     """
     _require_database()
     async with database.acquire() as connection:
@@ -207,11 +212,14 @@ async def record_action(
                         "this comment is on a connected Facebook Page, but Facebook "
                         "is not configured on this deployment",
                     )
+                token = cipher.open(mirror["credential_ciphertext"])
                 try:
-                    await meta.delete_comment(
-                        comment_id,
-                        cipher.open(mirror["credential_ciphertext"]),
-                    )
+                    if body.kind == "DELETE":
+                        await meta.delete_comment(comment_id, token)
+                    else:
+                        await meta.set_comment_hidden(
+                            comment_id, token, hidden=body.kind == "HIDE"
+                        )
                 except ValueError as exc:
                     raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
@@ -224,10 +232,11 @@ async def _provider_credential(
 ) -> dict[str, Any] | None:
     """The stored Page credential when this action must reach Facebook.
 
-    Returns None for LEAVE, and for seeded sample comments, whose page_id is
-    the sandbox Page rather than a connected one.
+    Returns None for LEAVE, which changes nothing on Facebook, and for seeded
+    sample comments, whose page_id is the sandbox Page rather than a connected
+    one.
     """
-    if kind != "DELETE":
+    if kind == "LEAVE":
         return None
     page_id = await repository.comment_page_id(connection, comment_id)
     if not page_id:

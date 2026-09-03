@@ -6,6 +6,8 @@
           "kind": {
             "enum": [
               "LEAVE",
+              "HIDE",
+              "UNHIDE",
               "DELETE"
             ],
             "title": "Kind",
@@ -2042,8 +2044,7 @@
                     "triage",
                     "institution_sample",
                     "novel_language",
-                    "uncertainty",
-                    "cleared"
+                    "uncertainty"
                   ],
                   "type": "string"
                 },
@@ -2226,7 +2227,7 @@
     },
     "/api/v1/comments/{comment_id}/actions": {
       "post": {
-        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, DELETE is applied on\nFacebook as well. The Action row and the Facebook state are written\ntogether: if Facebook refuses, the row is rolled back, because an Action\nrecords what actually happened to the comment.\n\nDELETE is irreversible on Facebook's side. LEAVE changes nothing there and\nexists so that a decision to allow a comment is still recorded.",
+        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, HIDE, UNHIDE and\nDELETE are applied on Facebook as well. The Action row and the Facebook\nstate are written together: if Facebook refuses, the row is rolled back,\nbecause an Action records what actually happened to the comment.\n\nHIDE is reversible through UNHIDE and is the option to reach for when the\nclassifier's judgement is uncertain. DELETE cannot be undone on Facebook.\nLEAVE changes nothing there and exists so that a decision to allow a\ncomment is still recorded, which is a different fact from nobody having\nlooked.",
         "operationId": "recordAction",
         "parameters": [
           {

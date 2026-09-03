@@ -35,6 +35,7 @@ class RecordingMetaClient:
 
     def __init__(self):
         self.deleted: list[str] = []
+        self.hidden: list[tuple[str, bool]] = []
         self.comments: list[ProviderComment] = []
         self.refuse = False
 
@@ -60,7 +61,11 @@ class RecordingMetaClient:
         return list(self.comments)
 
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None:
-        raise AssertionError("hiding is no longer part of the moderation policy")
+        if self.refuse:
+            raise ValueError(
+                "Meta rejected the request: (#200) Can not hide or unhide this comment"
+            )
+        self.hidden.append((comment_id, hidden))
 
     async def delete_comment(self, comment_id: str, token: str) -> None:
         if self.refuse:
@@ -539,5 +544,89 @@ async def test_institution_criticism_is_never_auto_removed_even_when_enabled(
             )
         assert actions == 0
         assert meta.deleted == []
+    finally:
+        await client.aclose()
+
+
+async def test_hiding_a_page_comment_is_applied_on_facebook(app, meta):
+    """Hiding is the reversible option, and it has to actually reach the Page.
+    A row saying HIDE while the comment is still visible is the failure this
+    whole action model exists to prevent."""
+    meta.comments = [provider_comment("fb-hide-1", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+
+        hidden = await client.post(
+            "/api/v1/comments/fb-hide-1/actions", json={"kind": "HIDE"}
+        )
+        assert hidden.status_code == 201, hidden.text
+        assert meta.hidden == [("fb-hide-1", True)]
+
+        shown = await client.post(
+            "/api/v1/comments/fb-hide-1/actions", json={"kind": "UNHIDE"}
+        )
+        assert shown.status_code == 201, shown.text
+        assert meta.hidden == [("fb-hide-1", True), ("fb-hide-1", False)]
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        row = next(i for i in listed["items"] if i["comment_id"] == "fb-hide-1")
+        assert row["latest_action"] == "UNHIDE"
+        assert row["latest_action_on_facebook"] is True
+    finally:
+        await client.aclose()
+
+
+async def test_hiding_never_deletes(app, meta):
+    """HIDE and DELETE reach different Graph calls. Routing a hide through the
+    delete path would destroy a comment a moderator chose to keep recoverable."""
+    meta.comments = [provider_comment("fb-hide-2", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        await client.post("/api/v1/comments/fb-hide-2/actions", json={"kind": "HIDE"})
+        assert meta.deleted == []
+    finally:
+        await client.aclose()
+
+
+async def test_a_refused_hide_records_no_action(app, meta):
+    """Facebook refuses to hide a comment the Page itself wrote. The row must
+    roll back, or KCMS would claim a hide that never happened."""
+    meta.comments = [provider_comment("fb-hide-3", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        meta.refuse = True
+
+        failed = await client.post(
+            "/api/v1/comments/fb-hide-3/actions", json={"kind": "HIDE"}
+        )
+        assert failed.status_code == 502, failed.text
+
+        async with database.acquire() as connection:
+            rows = await connection.fetchval(
+                "SELECT COUNT(*) FROM action WHERE comment_id = 'fb-hide-3'"
+            )
+        assert rows == 0
+    finally:
+        await client.aclose()
+
+
+async def test_hiding_a_sample_comment_never_calls_facebook(app, meta):
+    client = await connected_client(app)
+    try:
+        workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
+        async with database.acquire() as connection:
+            seeded_id = await connection.fetchval(
+                "SELECT comment_id FROM comment_content "
+                "WHERE workspace_id = $1 AND page_id = 'demo-page' LIMIT 1",
+                workspace_id,
+            )
+        acted = await client.post(
+            f"/api/v1/comments/{seeded_id}/actions", json={"kind": "HIDE"}
+        )
+        assert acted.status_code == 201, acted.text
+        assert meta.hidden == []
     finally:
         await client.aclose()
