@@ -33,6 +33,8 @@ SELECT
     c.author_ref,
     c.posted_at,
     c.page_id,
+    c.author_id,
+    pc.page_name,
     c.post_text,
     c.parent_text,
     c.is_reply,
@@ -58,6 +60,10 @@ SELECT
 
 WORK_LIST_FROM = """
 FROM comment_content c
+-- Which Page a comment came from. A workspace can hold several, so the row
+-- has to say; page_id alone is not something a moderator can read.
+LEFT JOIN page_connection pc
+    ON pc.workspace_id = c.workspace_id AND pc.external_page_id = c.page_id
 LEFT JOIN LATERAL (
     SELECT * FROM verdict v2
     WHERE v2.comment_id = c.comment_id
@@ -363,11 +369,12 @@ async def ingest_provider_comments(
         for comment, verdict in zip(fresh, verdicts, strict=True):
             await connection.execute(
                 """INSERT INTO comment_content
-                   (comment_id, page_id, workspace_id, author_ref, text,
+                   (comment_id, page_id, workspace_id, author_ref, author_id, text,
                     post_text, parent_text, is_reply, post_kind, post_permalink, posted_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                    ON CONFLICT (comment_id) DO NOTHING""",
-                comment.comment_id, page_id, workspace_id, comment.author_ref, comment.text,
+                comment.comment_id, page_id, workspace_id, comment.author_ref,
+                comment.author_id, comment.text,
                 comment.post_text, comment.parent_text, comment.is_reply,
                 comment.post_kind, comment.post_permalink, comment.created_time,
             )

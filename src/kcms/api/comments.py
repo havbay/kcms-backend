@@ -26,6 +26,12 @@ class WorkListItem(BaseModel):
     author_ref: str
     posted_at: datetime
     page_id: str
+    # The Page's name, so a row says which Page it came from. Null when the
+    # connection has since been removed; the comment and its record remain.
+    page_name: str | None
+    # Meta withholds `from` for commenters who have not authorized the app,
+    # so this is usually absent on a real Page.
+    author_id: str | None
     post_text: str | None
     parent_text: str | None
     is_reply: bool

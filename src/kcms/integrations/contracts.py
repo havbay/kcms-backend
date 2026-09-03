@@ -42,6 +42,9 @@ class ProviderComment:
     text: str
     created_time: datetime
     author_ref: str
+    # App-scoped: it identifies the commenter to this app only, and is
+    # absent whenever Meta withholds `from`.
+    author_id: str | None = None
     post_text: str | None = None
     post_permalink: str | None = None
     post_kind: str = "UNKNOWN"

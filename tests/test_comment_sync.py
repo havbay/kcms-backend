@@ -630,3 +630,51 @@ async def test_hiding_a_sample_comment_never_calls_facebook(app, meta):
         assert meta.hidden == []
     finally:
         await client.aclose()
+
+
+async def test_a_row_says_which_page_the_comment_came_from(app, meta):
+    """A workspace can hold several Pages, so page_id alone is not something a
+    moderator can read. The row carries the Page's name."""
+    meta.comments = [provider_comment("fb-pg-1", "សេវាកម្មនេះយឺតណាស់")]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        row = next(i for i in listed["items"] if i["comment_id"] == "fb-pg-1")
+        assert row["page_id"] == PAGE_ID
+        assert row["page_name"] == "Demo Page"
+    finally:
+        await client.aclose()
+
+
+async def test_the_commenter_id_is_kept_when_meta_supplies_it(app, meta):
+    """Meta withholds `from` for commenters who have not authorized the app, so
+    this is usually absent. Where it is given, discarding it threw away the only
+    identity the provider was ever going to offer."""
+    meta.comments = [
+        ProviderComment(
+            comment_id="fb-who-1",
+            text="សេវាកម្មនេះយឺតណាស់",
+            created_time=datetime.now(UTC),
+            author_ref="Dara Sok",
+            author_id="asid-123",
+        ),
+        ProviderComment(
+            comment_id="fb-who-2",
+            text="សេវាកម្មនេះយឺតណាស់ ម្ដងទៀត",
+            created_time=datetime.now(UTC),
+            author_ref="fb:fb-who-2",
+        ),
+    ]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        named = next(i for i in listed["items"] if i["comment_id"] == "fb-who-1")
+        unknown = next(i for i in listed["items"] if i["comment_id"] == "fb-who-2")
+        assert named["author_ref"] == "Dara Sok"
+        assert named["author_id"] == "asid-123"
+        # Absent, not invented.
+        assert unknown["author_id"] is None
+    finally:
+        await client.aclose()

@@ -1325,6 +1325,17 @@
             ],
             "title": "Abstain"
           },
+          "author_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Id"
+          },
           "author_ref": {
             "title": "Author Ref",
             "type": "string"
@@ -1441,6 +1452,17 @@
           "page_id": {
             "title": "Page Id",
             "type": "string"
+          },
+          "page_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Name"
           },
           "parent_text": {
             "anyOf": [
@@ -1561,6 +1583,8 @@
           "author_ref",
           "posted_at",
           "page_id",
+          "page_name",
+          "author_id",
           "post_text",
           "parent_text",
           "is_reply",

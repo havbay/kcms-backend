@@ -285,13 +285,15 @@ class GraphMetaClient:
                     # classify. Skipping keeps the work list reviewable.
                     continue
                 parent = item.get("parent") or {}
-                author = (item.get("from") or {}).get("name")
+                sender = item.get("from") or {}
+                author = sender.get("name")
                 comments.append(
                     ProviderComment(
                         comment_id=str(comment_id),
                         text=str(message),
                         created_time=self._parse_time(item.get("created_time")),
                         author_ref=str(author) if author else f"fb:{comment_id}",
+                        author_id=str(sender["id"]) if sender.get("id") else None,
                         post_text=str(post_text) if post_text else None,
                         post_permalink=str(post_permalink) if post_permalink else None,
                         post_kind=post_kind,
