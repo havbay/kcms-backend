@@ -96,6 +96,18 @@ async def test_allowlist_wins_when_both_allowlist_and_blocklist_match():
     assert verdict.severity is Severity.SAFE
 
 
+async def test_an_ambiguous_target_never_surfaces_a_comment_that_is_otherwise_safe():
+    """Abstaining on *who* it's aimed at is not a reason to ask a human when
+    the comment itself carries no risk — only an unsure severity is. A
+    person marker and an institution marker together with no risk words:
+    ambiguous target (abstain), but nothing else is uncertain."""
+    verdict = await classify_one("អ្នកនេះ ក្រុមហ៊ុន សួស្តី")
+
+    assert verdict.severity is Severity.SAFE
+    assert verdict.abstain is True
+    assert verdict.surfaced_reason is SurfacedReason.CLEARED
+
+
 async def test_a_blocklisted_institution_complaint_still_never_routes_to_triage():
     """Forcing HARMFUL must not defeat the institution-exception: hostile
     criticism of a company still goes to institution_sample, not triage."""

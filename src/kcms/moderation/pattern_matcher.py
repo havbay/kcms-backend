@@ -194,16 +194,22 @@ class PatternMatcher:
     @staticmethod
     def _route(severity: Severity, target: Target, abstain: bool) -> SurfacedReason:
         """Routing rules. Institution-directed criticism is never treated as
-        harm to be removed, however hostile."""
+        harm to be removed, however hostile.
+
+        SAFE always clears, even when the model abstained on *who* it was
+        aimed at — an unsure severity is worth a second look, an unsure
+        target on an otherwise-safe comment is not. Human attention is spent
+        on OFFENSIVE (a person decides); HARMFUL is removed automatically
+        (see auto_removable) unless it targets an institution, where the
+        exception above still applies.
+        """
+        if severity is Severity.SAFE:
+            return SurfacedReason.CLEARED
         if abstain:
             return SurfacedReason.UNCERTAINTY
-        if target is Target.INSTITUTION and severity is not Severity.SAFE:
+        if target is Target.INSTITUTION:
             return SurfacedReason.INSTITUTION_SAMPLE
-        if severity is Severity.HARMFUL:
-            return SurfacedReason.TRIAGE
-        if severity is Severity.OFFENSIVE:
-            return SurfacedReason.TRIAGE
-        return SurfacedReason.CLEARED
+        return SurfacedReason.TRIAGE
 
 
 def auto_removable(verdict: Verdict) -> bool:
