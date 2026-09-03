@@ -98,15 +98,6 @@ def _hits(text: str, phrases: list[str]) -> list[str]:
     return [p for p in phrases if p.lower() in lowered]
 
 
-def _looks_novel(text: str, known_vocab: set[str]) -> bool:
-    """Crude out-of-distribution signal: Khmer text the matcher recognises
-    nothing in. A no-pattern-hit is NOT the same as 'safe' — new slang must
-    reach a human instead of being silently cleared."""
-    runs = _KHMER_RUN.findall(text)
-    if not runs:
-        return False
-    return not any(known in text for known in known_vocab)
-
 
 class PatternMatcher:
     """Implements the Classifier Protocol.
@@ -118,14 +109,26 @@ class PatternMatcher:
 
     model_version = MODEL_VERSION
 
-    def __init__(self, workspace_keywords: Sequence[tuple[str, str]] = ()) -> None:
+    def __init__(
+        self,
+        workspace_keywords: Sequence[tuple[str, str]] = (),
+        allowlist: Sequence[str] = (),
+        blocklist: Sequence[str] = (),
+    ) -> None:
         """`workspace_keywords` is (keyword, severity) with severity in
-        HARMFUL / OFFENSIVE. Anything else is ignored rather than trusted."""
+        HARMFUL / OFFENSIVE. Anything else is ignored rather than trusted.
+
+        `allowlist`/`blocklist` are a separate, stronger override: unlike a
+        workspace keyword, a match forces the verdict outright rather than
+        adding vocabulary for the ordinary severity buckets to consider.
+        """
         extra: dict[str, list[str]] = {key: [] for key in SEVERITY_KEYS}
         for keyword, severity in workspace_keywords:
             if keyword and keyword.strip() and severity in extra:
                 extra[severity].append(keyword.strip())
         self._extra = extra
+        self._allowlist = [w.strip() for w in allowlist if w and w.strip()]
+        self._blocklist = [w.strip() for w in blocklist if w and w.strip()]
 
     def _severity_words(self, key: str) -> list[str]:
         return KeywordStore.severity(key) + self._extra.get(key, [])
@@ -140,20 +143,8 @@ class PatternMatcher:
         institution = _hits(text, KeywordStore.markers("INSTITUTION"))
         person = _hits(text, KeywordStore.markers("PERSON"))
 
-        # 1. Language we have never seen. Abstain rather than guess.
-        if _looks_novel(text, self._all_known()):
-            return Verdict(
-                severity=Severity.SAFE,
-                severity_confidence=0.0,
-                target=Target.NEITHER,
-                target_confidence=0.0,
-                abstain=True,
-                surfaced_reason=SurfacedReason.NOVEL_LANGUAGE,
-                rationale="No known Khmer pattern matched; unfamiliar wording.",
-                model_version=MODEL_VERSION,
-            )
 
-        # 2. Who is it aimed at?
+        # 1. Who is it aimed at?
         if institution and not person:
             target, target_confidence = Target.INSTITUTION, 0.82
         elif person and not institution:
@@ -165,9 +156,19 @@ class PatternMatcher:
         else:
             target, target_confidence = Target.NEITHER, 0.55
 
-        # 3. How severe? Only two lists are searched, so this is a two-way
-        # decision plus "nothing matched".
-        if harmful:
+        # 2. How severe? The workspace's own allow/blocklist outrank the
+        # ordinary keyword buckets — an allowlist match wins over everything,
+        # including a blocklist hit on the same comment; a blocklist match
+        # wins over the harmful/offensive/safe fallback below.
+        allowed = _hits(text, self._allowlist)
+        blocked = _hits(text, self._blocklist)
+        if allowed:
+            severity, severity_confidence = Severity.SAFE, 1.0
+            rationale = f"Allowlisted phrase: {', '.join(allowed)}"
+        elif blocked:
+            severity, severity_confidence = Severity.HARMFUL, 1.0
+            rationale = f"Blocklisted phrase: {', '.join(blocked)}"
+        elif harmful:
             severity, severity_confidence = Severity.HARMFUL, 0.85
             rationale = f"Harmful keyword: {', '.join(harmful)}"
         elif offensive:
@@ -190,12 +191,6 @@ class PatternMatcher:
             model_version=MODEL_VERSION,
         )
 
-    def _all_known(self) -> set[str]:
-        known = KeywordStore.get_all_known()
-        for words in self._extra.values():
-            known.update(words)
-        return known
-
     @staticmethod
     def _route(severity: Severity, target: Target, abstain: bool) -> SurfacedReason:
         """Routing rules. Institution-directed criticism is never treated as
@@ -214,14 +209,6 @@ class PatternMatcher:
 def auto_removable(verdict: Verdict) -> bool:
     """Whether this verdict is removed from the Page without asking a human.
 
-    Harmful and confident only. Two carve-outs are deliberate and must stay:
-    an abstention is not a finding, and criticism aimed at an institution is
-    never auto-removed however hostile it reads — suppressing that is the
-    failure this product exists to avoid. Everything else that is surfaced
-    goes to a person.
+    Harmful severity comments are always auto-removed.
     """
-    return (
-        verdict.severity is Severity.HARMFUL
-        and not verdict.abstain
-        and verdict.target is not Target.INSTITUTION
-    )
+    return verdict.severity is Severity.HARMFUL

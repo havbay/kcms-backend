@@ -99,6 +99,42 @@ async def test_anyone_can_rename_themselves(app, owner):
         await member.aclose()
 
 
+async def test_a_new_workspace_defaults_to_instant_delete(owner):
+    """0 keeps every existing and newly-created workspace on the pre-quarantine
+    behaviour until an owner opts in."""
+    assert (await owner.get("/api/v1/settings")).json()["auto_delete_delay_minutes"] == 0
+
+
+async def test_an_owner_can_set_the_auto_delete_delay(owner):
+    updated = await owner.patch("/api/v1/settings/auto-delete", json={"delay_minutes": 30})
+
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["auto_delete_delay_minutes"] == 30
+    assert (await owner.get("/api/v1/settings")).json()["auto_delete_delay_minutes"] == 30
+
+
+async def test_the_auto_delete_delay_rejects_a_value_off_the_menu(owner):
+    """5, 30, 60, 720 and 1440 minutes, or 0 for instant. Nothing else."""
+    refused = await owner.patch("/api/v1/settings/auto-delete", json={"delay_minutes": 7})
+
+    assert refused.status_code == 422
+    assert (await owner.get("/api/v1/settings")).json()["auto_delete_delay_minutes"] == 0
+
+
+async def test_a_member_cannot_change_the_auto_delete_delay(app, owner):
+    """Governs the whole workspace's Pages, so only an owner sets it — same
+    rule as renaming the workspace itself."""
+    token = (await owner.post("/api/v1/team/invitations", json={"role": "member"})).json()["token"]
+    member = await sign_up(app, "Sophea Kim")
+    try:
+        await member.post(f"/api/v1/team/invitations/{token}/accept")
+        refused = await member.patch("/api/v1/settings/auto-delete", json={"delay_minutes": 30})
+        assert refused.status_code == 403
+        assert (await owner.get("/api/v1/settings")).json()["auto_delete_delay_minutes"] == 0
+    finally:
+        await member.aclose()
+
+
 async def test_a_rename_does_not_rewrite_who_took_past_actions(owner):
     """The audit trail records who acted under the name used at the time.
     Rewriting it would let someone quietly disown a decision."""

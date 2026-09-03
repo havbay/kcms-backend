@@ -144,6 +144,54 @@ async def rename_workspace(
     return dict(row) if row else None
 
 
+async def set_auto_delete_delay(
+    connection: asyncpg.Connection, workspace_id: str, delay_minutes: int
+) -> None:
+    """How long a HARMFUL comment stays quarantined (hidden) before it is
+    deleted from Facebook. 0 deletes it outright, matching the pre-quarantine
+    behaviour. The CHECK constraint on the column is the actual guard against
+    an invalid value; the route's Literal type keeps bad input from getting
+    this far in the first place."""
+    await connection.execute(
+        "UPDATE workspace SET auto_delete_delay_minutes = $2 WHERE id = $1",
+        workspace_id, delay_minutes,
+    )
+
+
+async def set_auto_hide_offensive(
+    connection: asyncpg.Connection, workspace_id: str, enabled: bool
+) -> None:
+    """Whether an OFFENSIVE comment is hidden on Facebook the moment it is
+    classified. Unlike HARMFUL quarantine, this never schedules a delete — a
+    person still decides whether to leave it, unhide it, or delete it."""
+    await connection.execute(
+        "UPDATE workspace SET auto_hide_offensive = $2 WHERE id = $1",
+        workspace_id, enabled,
+    )
+
+
+async def set_keyword_allowlist(
+    connection: asyncpg.Connection, workspace_id: str, keywords: list[str]
+) -> None:
+    """Phrases that force a comment to SAFE, overriding everything else —
+    the blocklist and the pattern matcher's own vocabulary alike."""
+    await connection.execute(
+        "UPDATE workspace SET keyword_allowlist = $2 WHERE id = $1",
+        workspace_id, keywords,
+    )
+
+
+async def set_keyword_blocklist(
+    connection: asyncpg.Connection, workspace_id: str, keywords: list[str]
+) -> None:
+    """Phrases that force a comment to HARMFUL. Loses to an allowlist match
+    on the same comment, but otherwise outranks the pattern matcher."""
+    await connection.execute(
+        "UPDATE workspace SET keyword_blocklist = $2 WHERE id = $1",
+        workspace_id, keywords,
+    )
+
+
 async def rename_user(
     connection: asyncpg.Connection, user_id: str, display_name: str
 ) -> str:

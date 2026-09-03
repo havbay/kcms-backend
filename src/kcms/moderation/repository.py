@@ -8,7 +8,7 @@ from typing import Any
 import asyncpg
 
 from kcms.integrations.contracts import ProviderComment
-from kcms.moderation.contracts import CommentContext
+from kcms.moderation.contracts import CommentContext, Severity
 from kcms.moderation.pattern_matcher import PatternMatcher, auto_removable
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 from kcms.settings import settings
@@ -55,7 +55,8 @@ SELECT
     k.severity    AS corrected_severity,
     k.target      AS corrected_target,
     k.actor       AS corrected_by,
-    k.occurred_at AS corrected_at
+    k.occurred_at AS corrected_at,
+    sd.scheduled_for AS pending_delete_at
 """
 
 WORK_LIST_FROM = """
@@ -79,6 +80,8 @@ LEFT JOIN LATERAL (
     WHERE k2.comment_id = c.comment_id
     ORDER BY k2.occurred_at DESC, k2.id DESC LIMIT 1
 ) k ON TRUE
+-- A comment currently quarantined: HIDE has been applied, DELETE is pending.
+LEFT JOIN scheduled_deletion sd ON sd.comment_id = c.comment_id
 """
 
 
@@ -120,6 +123,12 @@ async def seed_workspace(connection: asyncpg.Connection, workspace_id: str) -> i
                 verdict.target.value, verdict.target_confidence, verdict.abstain,
                 verdict.surfaced_reason.value, verdict.rationale, verdict.model_version,
             )
+            if settings.auto_removal_enabled and auto_removable(verdict):
+                await connection.execute(
+                    "INSERT INTO action (comment_id, kind, actor, provider_applied) "
+                    "VALUES ($1, $2, $3, $4)",
+                    context.comment_id, "DELETE", "system:auto-removal", False,
+                )
     return len(SEED_COMMENTS)
 
 
@@ -326,19 +335,26 @@ async def ingest_provider_comments(
     workspace_id: str,
     page_id: str,
     comments: Sequence[ProviderComment],
-) -> tuple[int, list[str]]:
+    auto_delete_delay_minutes: int = 0,
+    auto_hide_offensive: bool = False,
+    keyword_allowlist: Sequence[str] = (),
+    keyword_blocklist: Sequence[str] = (),
+) -> tuple[int, list[str], list[str], list[str]]:
     """Store comments pulled from the provider and classify the new ones.
 
     The provider's own comment id is the primary key, so re-syncing the same
     Page is idempotent: an existing comment is skipped rather than duplicated,
     and its verdict, actions and corrections survive the next sync.
 
-    Returns the number imported and the comment ids the auto-removal policy
-    selected. Mirroring those to Facebook is the caller's job: this function
-    owns the database, not the network.
+    Returns the number imported, the comment ids to delete from Facebook now,
+    the comment ids to hide now for quarantine (with their deletion scheduled
+    for later), and the comment ids to hide now because they are OFFENSIVE
+    and this workspace auto-hides those (never scheduled for deletion — a
+    person still decides). Mirroring those to Facebook is the caller's job:
+    this function owns the database, not the network.
     """
     if not comments:
-        return 0, []
+        return 0, [], [], []
 
     existing = {
         row["comment_id"]
@@ -349,7 +365,7 @@ async def ingest_provider_comments(
     }
     fresh = [c for c in comments if c.comment_id not in existing]
     if not fresh:
-        return 0, []
+        return 0, [], [], []
 
     contexts = [
         CommentContext(
@@ -361,10 +377,14 @@ async def ingest_provider_comments(
         )
         for c in fresh
     ]
-    matcher = await _matcher_for(connection, workspace_id)
+    matcher = await _matcher_for(
+        connection, workspace_id, allowlist=keyword_allowlist, blocklist=keyword_blocklist
+    )
     verdicts = await matcher.classify(contexts)
 
-    auto_removed: list[str] = []
+    to_delete: list[str] = []
+    to_quarantine: list[str] = []
+    to_hide_offensive: list[str] = []
     async with connection.transaction():
         for comment, verdict in zip(fresh, verdicts, strict=True):
             await connection.execute(
@@ -390,11 +410,33 @@ async def ingest_provider_comments(
             if settings.auto_removal_enabled and auto_removable(verdict):
                 # Recorded before the provider call so the decision survives a
                 # Graph failure: provider_applied is set once it lands.
+                if auto_delete_delay_minutes <= 0:
+                    await record_action(
+                        connection, comment.comment_id, "DELETE", "system:auto-removal"
+                    )
+                    to_delete.append(comment.comment_id)
+                else:
+                    # Hidden now (reversible); deleted later if nobody steps
+                    # in. The scheduled_deletion row is what "later" means —
+                    # cancelling it is how a human overrides this.
+                    await record_action(
+                        connection, comment.comment_id, "HIDE", "system:auto-removal"
+                    )
+                    await connection.execute(
+                        """INSERT INTO scheduled_deletion
+                           (comment_id, workspace_id, page_id, scheduled_for)
+                           VALUES ($1, $2, $3, NOW() + $4 * INTERVAL '1 minute')""",
+                        comment.comment_id, workspace_id, page_id, auto_delete_delay_minutes,
+                    )
+                    to_quarantine.append(comment.comment_id)
+            elif auto_hide_offensive and verdict.severity is Severity.OFFENSIVE:
+                # Hidden, never scheduled for deletion — OFFENSIVE still
+                # always waits on a person to choose DELETE or LEAVE.
                 await record_action(
-                    connection, comment.comment_id, "DELETE", "system:auto-removal"
+                    connection, comment.comment_id, "HIDE", "system:auto-hide-offensive"
                 )
-                auto_removed.append(comment.comment_id)
-    return len(fresh), auto_removed
+                to_hide_offensive.append(comment.comment_id)
+    return len(fresh), to_delete, to_quarantine, to_hide_offensive
 
 
 async def comment_page_id(
@@ -515,15 +557,22 @@ async def remove_workspace_keyword(
 
 
 async def _matcher_for(
-    connection: asyncpg.Connection, workspace_id: str
+    connection: asyncpg.Connection,
+    workspace_id: str,
+    allowlist: Sequence[str] = (),
+    blocklist: Sequence[str] = (),
 ) -> PatternMatcher:
     """A matcher carrying this workspace's own vocabulary on top of the
-    shipped defaults."""
+    shipped defaults, plus its allow/blocklist overrides."""
     rows = await connection.fetch(
         "SELECT keyword, severity FROM workspace_keyword WHERE workspace_id = $1",
         workspace_id,
     )
-    return PatternMatcher([(r["keyword"], r["severity"]) for r in rows])
+    return PatternMatcher(
+        [(r["keyword"], r["severity"]) for r in rows],
+        allowlist=allowlist,
+        blocklist=blocklist,
+    )
 
 
 async def mark_action_applied(
@@ -542,4 +591,38 @@ async def mark_action_applied(
                ORDER BY occurred_at DESC, id DESC LIMIT 1
            )""",
         comment_id, kind,
+    )
+
+
+# ---- Quarantine auto-delete ------------------------------------------------
+# A HARMFUL comment with a positive auto_delete_delay_minutes is hidden now
+# and its deletion scheduled for later, not deleted outright. The row in
+# scheduled_deletion *is* the pending delete; removing it is what cancelling
+# means, so there is no separate cancelled/expired state to track.
+
+
+async def cancel_scheduled_deletion(connection: asyncpg.Connection, comment_id: str) -> None:
+    """A fresh human decision always supersedes a pending auto-delete.
+
+    Harmless no-op when nothing was scheduled, so callers can invoke this on
+    every action kind without checking first.
+    """
+    await connection.execute(
+        "DELETE FROM scheduled_deletion WHERE comment_id = $1", comment_id
+    )
+
+
+async def due_scheduled_deletions(connection: asyncpg.Connection) -> list[dict[str, Any]]:
+    """Quarantined comments whose delay has expired. The sweep's worklist."""
+    rows = await connection.fetch(
+        """SELECT comment_id, workspace_id, page_id FROM scheduled_deletion
+           WHERE scheduled_for <= NOW()"""
+    )
+    return [dict(row) for row in rows]
+
+
+async def pop_scheduled_deletion(connection: asyncpg.Connection, comment_id: str) -> None:
+    """Remove a schedule once the sweep has executed it."""
+    await connection.execute(
+        "DELETE FROM scheduled_deletion WHERE comment_id = $1", comment_id
     )

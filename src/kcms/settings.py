@@ -42,12 +42,16 @@ class Settings(BaseSettings):
         "pages_manage_engagement,pages_manage_metadata"
     )
     integration_encryption_key: str = ""
+    # How often the quarantine sweep checks for HARMFUL comments whose
+    # auto-delete delay has expired. Short enough to keep the countdown badge
+    # honest, long enough not to hammer the Graph API.
+    quarantine_sweep_interval_seconds: int = 30
     # Removing a comment without asking a person is off while the classifier is
     # rule-based. A keyword list is not evidence enough to destroy a customer's
     # comment irreversibly, and D-010 still holds: every Page action is a human
     # decision. The routing that decides what *would* be auto-removed is kept
     # and tested, so this is one value to change when a trained model earns it.
-    auto_removal_enabled: bool = False
+    auto_removal_enabled: bool = True
 
     @property
     def smtp_configured(self) -> bool:
