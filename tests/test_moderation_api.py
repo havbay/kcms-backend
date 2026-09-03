@@ -117,7 +117,7 @@ async def test_deleting_a_comment_writes_no_correction(client):
 
 async def test_correction_does_not_act_on_the_comment(client):
     """Disagreeing with a label is not a decision about the comment."""
-    comment_id = await first_comment_id(client, "សួស្តី")
+    comment_id = await first_comment_id(client, "ក្រុមហ៊ុននេះ")
     before = await client.get("/api/v1/comments")
     row = next(i for i in before.json()["items"] if i["comment_id"] == comment_id)
     action_before = row["latest_action"]
@@ -156,7 +156,7 @@ async def test_each_account_gets_its_own_isolated_workspace():
             alice_items = (await alice.get("/api/v1/comments")).json()["items"]
             bob_items = (await bob.get("/api/v1/comments")).json()["items"]
 
-            assert len(alice_items) == len(bob_items) == 11
+            assert len(alice_items) == len(bob_items) == 8
             # Same sample text, different rows.
             assert {i["comment_id"] for i in alice_items}.isdisjoint(
                 {i["comment_id"] for i in bob_items}
@@ -169,7 +169,7 @@ async def test_each_account_gets_its_own_isolated_workspace():
 
             # Bob must not see Alice's action...
             bob_after = (await bob.get("/api/v1/comments")).json()["items"]
-            assert all(i["latest_action"] is None for i in bob_after)
+            assert bob_after == bob_items
 
             # ...nor be able to act on her comment by guessing its id.
             assert (
@@ -191,18 +191,18 @@ async def test_the_work_list_is_paginated(client):
     worked because the data was seeded."""
     first = (await client.get("/api/v1/comments?limit=5&offset=0")).json()
     assert len(first["items"]) == 5
-    assert first["total"] == 11
+    assert first["total"] == 8
     assert first["limit"] == 5 and first["offset"] == 0
 
     second = (await client.get("/api/v1/comments?limit=5&offset=5")).json()
-    assert len(second["items"]) == 5
+    assert len(second["items"]) == 3
     # Pages do not overlap.
     assert {i["comment_id"] for i in first["items"]}.isdisjoint(
         {i["comment_id"] for i in second["items"]}
     )
 
     last = (await client.get("/api/v1/comments?limit=5&offset=10")).json()
-    assert len(last["items"]) == 1
+    assert len(last["items"]) == 0
 
 
 async def test_work_list_exposes_source_post_and_reply_context(client):
@@ -244,7 +244,7 @@ async def test_work_list_can_filter_pending_and_actioned_comments(client):
     assert actioned["total"] >= 1
     assert all(item["latest_action"] is not None for item in actioned["items"])
     assert all(item["latest_action"] is None for item in pending["items"])
-    assert actioned["total"] + pending["total"] == 11
+    assert actioned["total"] + pending["total"] == 8
 
 
 async def test_an_absurd_page_size_is_rejected(client):

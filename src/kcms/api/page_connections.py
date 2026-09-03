@@ -372,23 +372,52 @@ async def sync_comments(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     async with database.acquire() as connection:
-        imported, auto_removed = await moderation_repository.ingest_provider_comments(
-            connection, workspace["id"], stored["external_page_id"], comments
+        imported, to_delete, to_quarantine, to_hide_offensive = (
+            await moderation_repository.ingest_provider_comments(
+                connection,
+                workspace["id"],
+                stored["external_page_id"],
+                comments,
+                workspace["auto_delete_delay_minutes"],
+                workspace["auto_hide_offensive"],
+                workspace["keyword_allowlist"],
+                workspace["keyword_blocklist"],
+            )
         )
         await repository.mark_synced(connection, workspace["id"], page_id)
         refreshed = await repository.get_page_connection(connection, workspace["id"], page_id)
 
-    # Harmful comments are deleted from the Page without waiting for a reviewer.
-    # A Graph failure is not fatal to the sync: the action is already recorded,
-    # provider_applied stays false, and the comment is still in the queue for a
-    # human to action by hand.
-    for comment_id in auto_removed:
+    # Harmful comments are removed from the Page without waiting for a
+    # reviewer — deleted outright with no quarantine delay configured, or
+    # hidden now with the delete scheduled for later otherwise. A Graph
+    # failure is not fatal to the sync: the action is already recorded,
+    # provider_applied stays false, and the comment is still in the queue for
+    # a human to action by hand (which also cancels the pending schedule).
+    for comment_id in to_delete:
         try:
             await meta.delete_comment(comment_id, token)
         except Exception:
             continue
         async with database.acquire() as connection:
             await moderation_repository.mark_action_applied(connection, comment_id, "DELETE")
+
+    for comment_id in to_quarantine:
+        try:
+            await meta.set_comment_hidden(comment_id, token, hidden=True)
+        except Exception:
+            continue
+        async with database.acquire() as connection:
+            await moderation_repository.mark_action_applied(connection, comment_id, "HIDE")
+
+    # Offensive comments this workspace auto-hides. Same Graph call as
+    # quarantine, but never scheduled for deletion — a person still decides.
+    for comment_id in to_hide_offensive:
+        try:
+            await meta.set_comment_hidden(comment_id, token, hidden=True)
+        except Exception:
+            continue
+        async with database.acquire() as connection:
+            await moderation_repository.mark_action_applied(connection, comment_id, "HIDE")
 
     return SyncResult(
         fetched=len(comments),

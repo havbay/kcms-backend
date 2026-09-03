@@ -1031,6 +1031,57 @@
         "title": "Session",
         "type": "object"
       },
+      "SetAutoDeleteDelay": {
+        "properties": {
+          "delay_minutes": {
+            "enum": [
+              0,
+              5,
+              30,
+              60,
+              720,
+              1440
+            ],
+            "title": "Delay Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delay_minutes"
+        ],
+        "title": "SetAutoDeleteDelay",
+        "type": "object"
+      },
+      "SetKeywordList": {
+        "properties": {
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Keywords",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keywords"
+        ],
+        "title": "SetKeywordList",
+        "type": "object"
+      },
+      "SetToggle": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetToggle",
+        "type": "object"
+      },
       "SetupInvitationAccept": {
         "properties": {
           "display_name": {
@@ -1475,6 +1526,18 @@
             ],
             "title": "Parent Text"
           },
+          "pending_delete_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Delete At"
+          },
           "post_kind": {
             "title": "Post Kind",
             "type": "string"
@@ -1605,13 +1668,22 @@
           "corrected_severity",
           "corrected_target",
           "corrected_by",
-          "corrected_at"
+          "corrected_at",
+          "pending_delete_at"
         ],
         "title": "WorkListItem",
         "type": "object"
       },
       "WorkspaceSettings": {
         "properties": {
+          "auto_delete_delay_minutes": {
+            "title": "Auto Delete Delay Minutes",
+            "type": "integer"
+          },
+          "auto_hide_offensive": {
+            "title": "Auto Hide Offensive",
+            "type": "boolean"
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -1619,6 +1691,20 @@
           "is_sandbox": {
             "title": "Is Sandbox",
             "type": "boolean"
+          },
+          "keyword_allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keyword Allowlist",
+            "type": "array"
+          },
+          "keyword_blocklist": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keyword Blocklist",
+            "type": "array"
           },
           "sample_comments": {
             "title": "Sample Comments",
@@ -1643,7 +1729,11 @@
           "is_sandbox",
           "your_role",
           "display_name",
-          "sample_comments"
+          "sample_comments",
+          "auto_delete_delay_minutes",
+          "auto_hide_offensive",
+          "keyword_allowlist",
+          "keyword_blocklist"
         ],
         "title": "WorkspaceSettings",
         "type": "object"
@@ -2251,7 +2341,7 @@
     },
     "/api/v1/comments/{comment_id}/actions": {
       "post": {
-        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, HIDE, UNHIDE and\nDELETE are applied on Facebook as well. The Action row and the Facebook\nstate are written together: if Facebook refuses, the row is rolled back,\nbecause an Action records what actually happened to the comment.\n\nHIDE is reversible through UNHIDE and is the option to reach for when the\nclassifier's judgement is uncertain. DELETE cannot be undone on Facebook.\nLEAVE changes nothing there and exists so that a decision to allow a\ncomment is still recorded, which is a different fact from nobody having\nlooked.",
+        "description": "Records a moderation Action. Actions are append-only and reversible,\nand never become training labels.\n\nWhen the comment came from a connected Facebook Page, HIDE, UNHIDE and\nDELETE are applied on Facebook as well. The Action row and the Facebook\nstate are written together: if Facebook refuses, the row is rolled back,\nbecause an Action records what actually happened to the comment.\n\nHIDE is reversible through UNHIDE and is the option to reach for when the\nclassifier's judgement is uncertain. DELETE cannot be undone on Facebook.\nLEAVE changes nothing there and exists so that a decision to allow a\ncomment is still recorded, which is a different fact from nobody having\nlooked.\n\nAny action here also cancels a pending auto-delete on this comment\n(quarantine.sweep_once would otherwise delete it once the delay expires):\na human has now decided, so the countdown no longer applies.",
         "operationId": "recordAction",
         "parameters": [
           {
@@ -2867,6 +2957,234 @@
           }
         },
         "summary": "Get Settings"
+      }
+    },
+    "/api/v1/settings/auto-delete": {
+      "patch": {
+        "description": "How long a HARMFUL comment is quarantined before KCMS deletes it from\nFacebook. Governs the whole workspace's Pages, so only an owner sets it —\nsame rule as renaming the workspace itself.",
+        "operationId": "setAutoDeleteDelay",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAutoDeleteDelay"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Auto Delete Delay"
+      }
+    },
+    "/api/v1/settings/auto-hide-offensive": {
+      "patch": {
+        "description": "Whether an OFFENSIVE comment is hidden on Facebook immediately, ahead\nof any human review. Governs the whole workspace, so owner-only.",
+        "operationId": "setAutoHideOffensive",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetToggle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Auto Hide Offensive"
+      }
+    },
+    "/api/v1/settings/keyword-allowlist": {
+      "patch": {
+        "description": "Phrases that force SAFE, ahead of the blocklist and the pattern\nmatcher's own vocabulary alike.",
+        "operationId": "setKeywordAllowlist",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetKeywordList"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Keyword Allowlist"
+      }
+    },
+    "/api/v1/settings/keyword-blocklist": {
+      "patch": {
+        "description": "Phrases that force HARMFUL. Loses to an allowlist match on the same\ncomment, but otherwise outranks the pattern matcher.",
+        "operationId": "setKeywordBlocklist",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetKeywordList"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Keyword Blocklist"
       }
     },
     "/api/v1/settings/keywords": {

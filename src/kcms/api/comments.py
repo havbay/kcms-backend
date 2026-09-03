@@ -53,6 +53,9 @@ class WorkListItem(BaseModel):
     corrected_target: str | None
     corrected_by: str | None
     corrected_at: datetime | None
+    # Set while this comment is quarantined: hidden now, deleted once this
+    # time passes with no human action. Cleared the moment a human acts.
+    pending_delete_at: datetime | None
 
 
 class WorkList(BaseModel):
@@ -192,6 +195,10 @@ async def record_action(
     LEAVE changes nothing there and exists so that a decision to allow a
     comment is still recorded, which is a different fact from nobody having
     looked.
+
+    Any action here also cancels a pending auto-delete on this comment
+    (quarantine.sweep_once would otherwise delete it once the delay expires):
+    a human has now decided, so the countdown no longer applies.
     """
     _require_database()
     async with database.acquire() as connection:
@@ -211,6 +218,10 @@ async def record_action(
                 user["display_name"],
                 provider_applied=bool(mirror),
             )
+            # A fresh human decision always overrides a pending auto-delete —
+            # whichever way they decided. Rolled back with everything else in
+            # this transaction if the Facebook mirror call below fails.
+            await repository.cancel_scheduled_deletion(connection, comment_id)
             if mirror:
                 if meta is None or cipher is None:
                     raise HTTPException(

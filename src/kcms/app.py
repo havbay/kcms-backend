@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -13,6 +14,7 @@ from kcms.api import (
     settings_routes,
     team,
 )
+from kcms.moderation.quarantine import run_quarantine_sweep
 from kcms.settings import settings
 from kcms.shared.database import database
 from kcms.shared.database.migrate import apply_migrations
@@ -23,11 +25,17 @@ logger = logging.getLogger("kcms")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # A failed connection must not stop the service; /health reports DEGRADED.
+    sweep_task: asyncio.Task | None = None
     try:
         await database.connect(settings.database_url)
         async with database.acquire() as connection:
             applied = await apply_migrations(connection)
         logger.info("database ready (migrations=%s)", applied)
+        # Only started once the database is actually reachable — without one
+        # there is nothing for the sweep to read.
+        sweep_task = asyncio.create_task(
+            run_quarantine_sweep(settings.quarantine_sweep_interval_seconds)
+        )
     except Exception as exc:
         # Startup must not crash: /health reports DEGRADED instead. But the
         # reason has to be visible, or a misconfigured DATABASE_URL is
@@ -36,6 +44,9 @@ async def lifespan(app: FastAPI):
             "database unavailable at startup: %s: %s", type(exc).__name__, exc
         )
     yield
+    if sweep_task is not None:
+        sweep_task.cancel()
+        await asyncio.gather(sweep_task, return_exceptions=True)
     await database.disconnect()
 
 

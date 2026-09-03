@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from kcms.api.auth import current_user
 from kcms.auth import repository as auth_repository
@@ -22,10 +22,51 @@ class WorkspaceSettings(BaseModel):
     # What is stored, not how the workspace was provisioned: the removal
     # control depends on samples existing, not on the sandbox flag.
     sample_comments: int
+    # Minutes a HARMFUL comment stays quarantined (hidden) before it is
+    # deleted from Facebook. 0 deletes it outright.
+    auto_delete_delay_minutes: int
+    # Whether an OFFENSIVE comment is hidden on Facebook the moment it is
+    # classified. Never scheduled for deletion — a person still decides.
+    auto_hide_offensive: bool
+    # Phrases that force a verdict, ahead of the pattern matcher's own
+    # vocabulary. Allowlist wins over blocklist wins over the AI.
+    keyword_allowlist: list[str]
+    keyword_blocklist: list[str]
 
 
 class RenameWorkspace(BaseModel):
     name: str = Field(min_length=2, max_length=80)
+
+
+AutoDeleteDelayMinutes = Literal[0, 5, 30, 60, 720, 1440]
+
+
+class SetAutoDeleteDelay(BaseModel):
+    delay_minutes: AutoDeleteDelayMinutes
+
+
+class SetToggle(BaseModel):
+    enabled: bool
+
+
+class SetKeywordList(BaseModel):
+    keywords: list[str] = Field(max_length=200)
+
+    @field_validator("keywords")
+    @classmethod
+    def _clean(cls, values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            stripped = value.strip()
+            if not stripped or len(stripped) > 100:
+                raise ValueError("each phrase must be 1-100 characters")
+            key = stripped.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            cleaned.append(stripped)
+        return cleaned
 
 
 class RenameSelf(BaseModel):
@@ -49,6 +90,10 @@ async def _settings(
         sample_comments=await moderation_repository.count_sample_comments(
             connection, workspace["id"]
         ),
+        auto_delete_delay_minutes=workspace["auto_delete_delay_minutes"],
+        auto_hide_offensive=workspace["auto_hide_offensive"],
+        keyword_allowlist=list(workspace["keyword_allowlist"]),
+        keyword_blocklist=list(workspace["keyword_blocklist"]),
     )
 
 
@@ -84,6 +129,101 @@ async def rename_workspace(
         await repository.rename_workspace(connection, workspace["id"], body.name)
         return await _settings(
             connection, {**workspace, "name": body.name.strip()}, user["display_name"]
+        )
+
+
+@router.patch(
+    "/auto-delete", operation_id="setAutoDeleteDelay", response_model=WorkspaceSettings
+)
+async def set_auto_delete_delay(
+    body: SetAutoDeleteDelay,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> WorkspaceSettings:
+    """How long a HARMFUL comment is quarantined before KCMS deletes it from
+    Facebook. Governs the whole workspace's Pages, so only an owner sets it —
+    same rule as renaming the workspace itself."""
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        if workspace["role"] != "owner":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "only an owner can change this setting"
+            )
+        await repository.set_auto_delete_delay(connection, workspace["id"], body.delay_minutes)
+        return await _settings(
+            connection,
+            {**workspace, "auto_delete_delay_minutes": body.delay_minutes},
+            user["display_name"],
+        )
+
+
+def _require_owner(workspace: dict[str, Any]) -> None:
+    if workspace["role"] != "owner":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "only an owner can change this setting")
+
+
+@router.patch(
+    "/auto-hide-offensive", operation_id="setAutoHideOffensive", response_model=WorkspaceSettings
+)
+async def set_auto_hide_offensive(
+    body: SetToggle,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> WorkspaceSettings:
+    """Whether an OFFENSIVE comment is hidden on Facebook immediately, ahead
+    of any human review. Governs the whole workspace, so owner-only."""
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        _require_owner(workspace)
+        await repository.set_auto_hide_offensive(connection, workspace["id"], body.enabled)
+        return await _settings(
+            connection, {**workspace, "auto_hide_offensive": body.enabled}, user["display_name"]
+        )
+
+
+@router.patch(
+    "/keyword-allowlist", operation_id="setKeywordAllowlist", response_model=WorkspaceSettings
+)
+async def set_keyword_allowlist(
+    body: SetKeywordList,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> WorkspaceSettings:
+    """Phrases that force SAFE, ahead of the blocklist and the pattern
+    matcher's own vocabulary alike."""
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        _require_owner(workspace)
+        await repository.set_keyword_allowlist(connection, workspace["id"], body.keywords)
+        return await _settings(
+            connection, {**workspace, "keyword_allowlist": body.keywords}, user["display_name"]
+        )
+
+
+@router.patch(
+    "/keyword-blocklist", operation_id="setKeywordBlocklist", response_model=WorkspaceSettings
+)
+async def set_keyword_blocklist(
+    body: SetKeywordList,
+    user: Annotated[dict[str, Any], Depends(current_user)],
+) -> WorkspaceSettings:
+    """Phrases that force HARMFUL. Loses to an allowlist match on the same
+    comment, but otherwise outranks the pattern matcher."""
+    _require_database()
+    async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        _require_owner(workspace)
+        await repository.set_keyword_blocklist(connection, workspace["id"], body.keywords)
+        return await _settings(
+            connection, {**workspace, "keyword_blocklist": body.keywords}, user["display_name"]
         )
 
 
