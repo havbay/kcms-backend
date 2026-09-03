@@ -11,6 +11,7 @@ from kcms.integrations.contracts import ProviderComment
 from kcms.moderation.contracts import CommentContext
 from kcms.moderation.pattern_matcher import PatternMatcher, auto_removable
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
+from kcms.settings import settings
 
 # Once a workspace connects a Page, the queue is that Page's comments. The
 # seeded samples exist so the screens are not empty before a connection, and
@@ -379,7 +380,7 @@ async def ingest_provider_comments(
                 verdict.target.value, verdict.target_confidence, verdict.abstain,
                 verdict.surfaced_reason.value, verdict.rationale, verdict.model_version,
             )
-            if auto_removable(verdict):
+            if settings.auto_removal_enabled and auto_removable(verdict):
                 # Recorded before the provider call so the decision survives a
                 # Graph failure: provider_applied is set once it lands.
                 await record_action(

@@ -468,3 +468,76 @@ async def test_a_sample_delete_is_marked_as_not_reaching_facebook(app, meta):
         assert meta.deleted == []
     finally:
         await client.aclose()
+
+
+async def test_a_harmful_comment_reaches_a_person_instead_of_being_removed(app, meta):
+    """Auto-removal is off while the classifier is rule-based. A keyword list is
+    not evidence enough to destroy a comment irreversibly, so a harmful comment
+    is queued for a person rather than deleted on arrival."""
+    meta.comments = [provider_comment("fb-h-1", "អ្នកនេះឆ្កួតណាស់ ងាប់ទៅ")]
+    client = await connected_client(app)
+    try:
+        result = await client.post(
+            f"/api/v1/facebook/connections/{PAGE_ID}/sync"
+        )
+        assert result.status_code == 200, result.text
+
+        listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
+        row = next(i for i in listed["items"] if i["comment_id"] == "fb-h-1")
+        assert row["severity"] == "HARMFUL"
+        # Queued, not acted on, and nothing was sent to Facebook.
+        assert row["latest_action"] is None
+        assert meta.deleted == []
+
+        async with database.acquire() as connection:
+            actions = await connection.fetchval(
+                "SELECT COUNT(*) FROM action WHERE comment_id = 'fb-h-1'"
+            )
+        assert actions == 0
+    finally:
+        await client.aclose()
+
+
+async def test_auto_removal_still_works_when_the_deployment_enables_it(app, meta, monkeypatch):
+    """The routing that decides what would be auto-removed is kept and proven,
+    so turning it back on is one setting rather than rebuilt work."""
+    from kcms.settings import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "auto_removal_enabled", True)
+    meta.comments = [provider_comment("fb-h-2", "អ្នកនេះឆ្កួតណាស់ ងាប់ទៅ")]
+    client = await connected_client(app)
+    try:
+        result = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        assert result.status_code == 200, result.text
+
+        async with database.acquire() as connection:
+            row = await connection.fetchrow(
+                "SELECT kind, actor FROM action WHERE comment_id = 'fb-h-2'"
+            )
+        assert row is not None
+        assert row["kind"] == "DELETE"
+        assert row["actor"] == "system:auto-removal"
+    finally:
+        await client.aclose()
+
+
+async def test_institution_criticism_is_never_auto_removed_even_when_enabled(
+    app, meta, monkeypatch
+):
+    """The carve-out is the reason this product exists. It must survive the
+    setting being switched on."""
+    from kcms.settings import settings as app_settings
+
+    monkeypatch.setattr(app_settings, "auto_removal_enabled", True)
+    meta.comments = [provider_comment("fb-i-1", "ក្រុមហ៊ុននេះអាក្រក់ណាស់ ងាប់")]
+    client = await connected_client(app)
+    try:
+        await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        async with database.acquire() as connection:
+            actions = await connection.fetchval(
+                "SELECT COUNT(*) FROM action WHERE comment_id = 'fb-i-1'"
+            )
+        assert actions == 0
+        assert meta.deleted == []
+    finally:
+        await client.aclose()

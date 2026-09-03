@@ -42,6 +42,12 @@ class Settings(BaseSettings):
         "pages_manage_engagement,pages_manage_metadata"
     )
     integration_encryption_key: str = ""
+    # Removing a comment without asking a person is off while the classifier is
+    # rule-based. A keyword list is not evidence enough to destroy a customer's
+    # comment irreversibly, and D-010 still holds: every Page action is a human
+    # decision. The routing that decides what *would* be auto-removed is kept
+    # and tested, so this is one value to change when a trained model earns it.
+    auto_removal_enabled: bool = False
 
     @property
     def smtp_configured(self) -> bool:
