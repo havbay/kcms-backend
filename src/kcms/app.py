@@ -2,6 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,6 +21,30 @@ from kcms.shared.database import database
 from kcms.shared.database.migrate import apply_migrations
 
 logger = logging.getLogger("kcms")
+
+
+def _scrub_sentry_event(event: dict, hint: dict) -> dict:
+    """Keep provider credentials and customer comment content out of Sentry."""
+    request = event.get("request")
+    if isinstance(request, dict):
+        request.pop("data", None)
+        request.pop("cookies", None)
+        headers = request.get("headers")
+        if isinstance(headers, dict):
+            for key in ("authorization", "Authorization", "cookie", "Cookie"):
+                headers.pop(key, None)
+    return event
+
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.sentry_environment,
+        send_default_pii=False,
+        request_bodies="never",
+        traces_sample_rate=0.1,
+        before_send=_scrub_sentry_event,
+    )
 
 
 @asynccontextmanager
