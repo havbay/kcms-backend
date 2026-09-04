@@ -41,7 +41,6 @@ if settings.sentry_dsn:
         dsn=settings.sentry_dsn,
         environment=settings.sentry_environment,
         send_default_pii=False,
-        request_bodies="never",
         traces_sample_rate=0.1,
         before_send=_scrub_sentry_event,
     )
