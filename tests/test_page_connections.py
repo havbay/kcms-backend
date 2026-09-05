@@ -85,6 +85,30 @@ async def approved_client(app) -> httpx.AsyncClient:
     return client
 
 
+async def trial_client(app) -> httpx.AsyncClient:
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+    created = await client.post(
+        "/api/v1/auth/signup",
+        json={
+            "email": f"trial-owner-{uuid.uuid4().hex[:10]}@example.com",
+            "password": "a-long-enough-password",
+            "display_name": "Trial Owner",
+            "organization": "Trial Shop",
+        },
+    )
+    assert created.status_code == 201, created.text
+    client.headers["Authorization"] = f"Bearer {created.json()['token']}"
+    workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
+    async with database.acquire() as connection:
+        await connection.execute(
+            "UPDATE workspace SET is_sandbox = FALSE, plan = 'TRIAL', "
+            "trial_started_at = NOW(), trial_expires_at = NOW() + INTERVAL '7 days' "
+            "WHERE id = $1",
+            workspace_id,
+        )
+    return client
+
+
 @pytest.fixture
 async def app():
     application = create_app()
@@ -156,6 +180,16 @@ async def test_connection_status_and_disconnect_never_return_the_credential(app)
         removed = await client.delete("/api/v1/facebook/connections/page-123")
         assert removed.status_code == 204
         assert (await client.get("/api/v1/facebook/connections")).json()["connections"] == []
+    finally:
+        await client.aclose()
+
+
+async def test_trial_workspace_connection_status_is_available(app):
+    client = await trial_client(app)
+    try:
+        response = await client.get("/api/v1/facebook/connections")
+        assert response.status_code == 200, response.text
+        assert response.json() == {"plan": "TRIAL", "page_limit": 1, "connections": []}
     finally:
         await client.aclose()
 
