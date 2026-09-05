@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     contract_version: str = "1.0.0"
     sentry_dsn: str = ""
     sentry_environment: str = "production"
+    clerk_jwt_issuer: str = ""
     # Client accounts are created through reviewed, one-time setup invitations.
     # Tests may enable direct signup explicitly to create isolated fixtures.
     public_signup_enabled: bool = False
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     # comment irreversibly, and D-010 still holds: every Page action is a human
     # decision. The routing that decides what *would* be auto-removed is kept
     # and tested, so this is one value to change when a trained model earns it.
-    auto_removal_enabled: bool = True
+    auto_removal_enabled: bool = False
 
     @property
     def smtp_configured(self) -> bool:

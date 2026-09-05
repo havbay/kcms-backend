@@ -17,6 +17,9 @@ class WorkspaceSettings(BaseModel):
     workspace_id: str
     workspace_name: str
     is_sandbox: bool
+    plan: Literal["TRIAL", "STARTER", "GROWTH"]
+    trial_started_at: datetime | None
+    trial_expires_at: datetime | None
     your_role: str
     display_name: str
     # What is stored, not how the workspace was provisioned: the removal
@@ -85,6 +88,9 @@ async def _settings(
         workspace_id=workspace["id"],
         workspace_name=workspace["name"],
         is_sandbox=workspace["is_sandbox"],
+        plan=workspace["plan"],
+        trial_started_at=workspace["trial_started_at"],
+        trial_expires_at=workspace["trial_expires_at"],
         your_role=workspace["role"],
         display_name=display_name,
         sample_comments=await moderation_repository.count_sample_comments(

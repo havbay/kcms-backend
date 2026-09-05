@@ -1706,9 +1706,42 @@
             "title": "Keyword Blocklist",
             "type": "array"
           },
+          "plan": {
+            "enum": [
+              "TRIAL",
+              "STARTER",
+              "GROWTH"
+            ],
+            "title": "Plan",
+            "type": "string"
+          },
           "sample_comments": {
             "title": "Sample Comments",
             "type": "integer"
+          },
+          "trial_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Expires At"
+          },
+          "trial_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Started At"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -1727,6 +1760,9 @@
           "workspace_id",
           "workspace_name",
           "is_sandbox",
+          "plan",
+          "trial_started_at",
+          "trial_expires_at",
           "your_role",
           "display_name",
           "sample_comments",
@@ -1880,6 +1916,53 @@
           }
         },
         "summary": "Decide Pilot Request"
+      }
+    },
+    "/api/v1/auth/clerk": {
+      "post": {
+        "description": "Exchange a verified Clerk session for KCMS's workspace-scoped session.",
+        "operationId": "signInWithClerk",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign In With Clerk"
       }
     },
     "/api/v1/auth/me": {

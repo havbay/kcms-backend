@@ -12,6 +12,7 @@ dependencies = [
     "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
     "sentry-sdk[fastapi]>=2.40",
+    "pyjwt[crypto]>=2.10",
 ]
 
 [dependency-groups]

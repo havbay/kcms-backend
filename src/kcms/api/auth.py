@@ -1,5 +1,6 @@
 from typing import Annotated, Any
 
+import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 
@@ -26,6 +27,14 @@ class SignInRequest(BaseModel):
 class TelegramRequest(BaseModel):
     # Verbatim Telegram Login Widget payload, including its hash.
     payload: dict[str, str]
+
+
+class ClerkClaims(BaseModel):
+    sub: str = Field(min_length=1)
+    email: str | None = None
+    name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 class AuthUser(BaseModel):
@@ -144,6 +153,41 @@ async def sign_in_with_telegram(body: TelegramRequest) -> Session:
 
     async with database.acquire() as connection:
         token, user = await repository.sign_in_with_telegram(connection, telegram_id, display_name)
+    return Session(token=token, user=_as_auth_user(user))
+
+
+def _verify_clerk_token(token: str) -> ClerkClaims:
+    if not settings.clerk_jwt_issuer:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Clerk authentication is not configured"
+        )
+    issuer = settings.clerk_jwt_issuer.rstrip("/")
+    try:
+        signing_key = jwt.PyJWKClient(
+            f"{issuer}/.well-known/jwks.json"
+        ).get_signing_key_from_jwt(token)
+        claims = jwt.decode(token, signing_key.key, algorithms=["RS256"], issuer=issuer)
+        return ClerkClaims.model_validate(claims)
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session is invalid") from exc
+
+
+@router.post("/clerk", operation_id="signInWithClerk", response_model=Session)
+async def sign_in_with_clerk(
+    authorization: Annotated[str | None, Header()] = None,
+) -> Session:
+    """Exchange a verified Clerk session for KCMS's workspace-scoped session."""
+    _require_database()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
+    claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
+    name = claims.name or " ".join(part for part in (claims.first_name, claims.last_name) if part)
+    if not name:
+        name = (claims.email or "KCMS user").split("@", 1)[0]
+    async with database.acquire() as connection:
+        token, user = await repository.sign_in_with_clerk(
+            connection, claims.sub, claims.email, name
+        )
     return Session(token=token, user=_as_auth_user(user))
 
 

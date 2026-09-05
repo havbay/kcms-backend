@@ -18,6 +18,7 @@ from kcms.moderation.repository import seed_workspace
 from kcms.settings import settings
 
 SESSION_DAYS = 30
+TRIAL_DAYS = 7
 
 
 async def _issue_session(connection: asyncpg.Connection, user_id: str) -> str:
@@ -48,8 +49,13 @@ async def _create_sandbox_workspace(
     path has to cope with a user who belongs nowhere."""
     workspace_id = uuid.uuid4().hex
     await connection.execute(
-        "INSERT INTO workspace (id, name, is_sandbox) VALUES ($1, $2, TRUE)",
-        workspace_id, name.strip() or "My workspace",
+        """INSERT INTO workspace
+           (id, name, is_sandbox, plan, trial_started_at, trial_expires_at)
+           VALUES ($1, $2, TRUE, 'TRIAL', $3, $4)""",
+        workspace_id,
+        name.strip() or "My workspace",
+        datetime.now(UTC),
+        datetime.now(UTC) + timedelta(days=TRIAL_DAYS),
     )
     await connection.execute(
         "INSERT INTO membership (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
@@ -63,7 +69,8 @@ async def workspace_for_user(
     connection: asyncpg.Connection, user_id: str
 ) -> dict[str, Any] | None:
     row = await connection.fetchrow(
-        """SELECT w.id, w.name, w.is_sandbox, w.plan, w.auto_delete_delay_minutes,
+        """SELECT w.id, w.name, w.is_sandbox, w.plan, w.trial_started_at,
+                         w.trial_expires_at, w.auto_delete_delay_minutes,
                   w.auto_hide_offensive, w.keyword_allowlist, w.keyword_blocklist, m.role
            FROM membership m JOIN workspace w ON w.id = m.workspace_id
            WHERE m.user_id = $1
@@ -214,6 +221,50 @@ async def sign_in_with_telegram(
             )
         token = await _issue_session(connection, user_id)
     return token, {"id": user_id, "display_name": name, "provider": "telegram"}
+
+
+async def sign_in_with_clerk(
+    connection: asyncpg.Connection,
+    clerk_user_id: str,
+    email: str | None,
+    display_name: str,
+) -> tuple[str, dict[str, Any]]:
+    """Link a verified Clerk identity and provision its first trial workspace."""
+    async with connection.transaction():
+        row = await connection.fetchrow(
+            """SELECT u.id, u.display_name, u.is_platform_admin
+               FROM identity i JOIN app_user u ON u.id = i.user_id
+               WHERE i.provider = 'clerk' AND i.provider_id = $1""",
+            clerk_user_id,
+        )
+        if row:
+            user_id, name = row["id"], row["display_name"]
+            is_admin = bool(row["is_platform_admin"])
+        else:
+            existing_id = None
+            if email:
+                existing_id = await connection.fetchval(
+                    "SELECT user_id FROM identity WHERE provider = 'email' AND provider_id = $1",
+                    email.strip().lower(),
+                )
+            user_id = existing_id or await _create_user(connection, display_name)
+            name = display_name if not existing_id else await connection.fetchval(
+                "SELECT display_name FROM app_user WHERE id = $1", user_id
+            )
+            await connection.execute(
+                """INSERT INTO identity (user_id, provider, provider_id, secret)
+                   VALUES ($1, 'clerk', $2, NULL)""",
+                user_id,
+                clerk_user_id,
+            )
+            is_admin = False
+        token = await _issue_session(connection, user_id)
+    return token, {
+        "id": user_id,
+        "display_name": name,
+        "provider": "clerk",
+        "is_platform_admin": is_admin,
+    }
 
 
 async def user_for_token(connection: asyncpg.Connection, token: str) -> dict[str, Any] | None:
