@@ -202,6 +202,17 @@ async def record_action(
     """
     _require_database()
     async with database.acquire() as connection:
+        workspace = await auth_repository.workspace_for_user(connection, user["id"])
+        if not workspace:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "no workspace for this account")
+        if auth_repository.trial_expired(workspace):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                (
+                    "This free trial has expired. Upgrade the workspace to continue using "
+                    "Facebook actions."
+                ),
+            )
         workspace_id = await _workspace_id(connection, user)
         # 404 rather than 403: a different status would confirm the comment
         # exists in someone else's workspace.

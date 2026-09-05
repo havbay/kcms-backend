@@ -34,6 +34,10 @@ _LIMIT_REACHED = (
     "to connect another one."
 )
 
+_TRIAL_EXPIRED = (
+    "This free trial has expired. Upgrade the workspace to continue using Facebook actions."
+)
+
 
 class ManualPageConnection(BaseModel):
     page_access_token: str = Field(min_length=20, max_length=4096)
@@ -91,6 +95,11 @@ async def _workspace(connection, user: dict[str, Any]) -> dict[str, Any]:
     return workspace
 
 
+def _require_active_trial(workspace: dict[str, Any]) -> None:
+    if auth_repository.trial_expired(workspace):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, _TRIAL_EXPIRED)
+
+
 async def _require_capacity(connection, workspace: dict[str, Any], page_id: str) -> None:
     """Reconnecting a Page you already hold never counts against the limit —
     only genuinely adding a new one does."""
@@ -132,6 +141,7 @@ async def connect_manually(
 ) -> PageConnection:
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
+        _require_active_trial(workspace)
     try:
         page = await meta.validate_page_token(body.page_access_token)
     except ValueError as exc:
@@ -168,6 +178,7 @@ async def start_authorization(
     state = secrets.token_urlsafe(32)
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
+        _require_active_trial(workspace)
         await repository.create_oauth_attempt(
             connection,
             state_hash=hash_session_token(state),
@@ -294,6 +305,7 @@ async def select_page(
     cipher: Annotated[CredentialCipher, Depends(get_credential_cipher)],
 ) -> PageConnection:
     workspace, pages = await _oauth_pages(state, user, cipher)
+    _require_active_trial(workspace)
     page = next((candidate for candidate in pages if candidate.page_id == body.page_id), None)
     if not page:
         raise HTTPException(
@@ -358,6 +370,7 @@ async def sync_comments(
     """
     async with database.acquire() as connection:
         workspace = await _workspace(connection, user)
+        _require_active_trial(workspace)
         found = await repository.get_page_connection(connection, workspace["id"], page_id)
         if not found:
             raise HTTPException(status.HTTP_409_CONFLICT, "no Facebook Page is connected")

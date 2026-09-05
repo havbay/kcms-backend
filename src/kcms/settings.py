@@ -12,8 +12,8 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_environment: str = "production"
     clerk_jwt_issuer: str = ""
-    # Client accounts are created through reviewed, one-time setup invitations.
-    # Tests may enable direct signup explicitly to create isolated fixtures.
+    # Legacy email signup remains independently configurable. Clerk creates
+    # public trial workspaces through the verified token-exchange endpoint.
     public_signup_enabled: bool = False
     # Telegram sign-in stays disabled until a bot token is configured. It must
     # fail closed: an unconfigured provider is unavailable, never open.

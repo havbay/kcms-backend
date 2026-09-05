@@ -29,7 +29,8 @@ Migrations run and seed data is inserted automatically on startup.
 | `GET` | `/api/v1/admin/pilot-requests` | Platform Administrator pilot queue |
 | `POST` | `/api/v1/admin/pilot-requests/{id}/decision` | Approve or decline a pilot request |
 | `GET/POST` | `/api/v1/setup-invitations/{token}` | Preview and accept a one-time owner setup link |
-| `POST` | `/api/v1/auth/signin`, `/signout` | Email/password sessions; account creation uses reviewed setup invitations |
+| `POST` | `/api/v1/auth/signin`, `/signout` | Legacy email/password sessions |
+| `POST` | `/api/v1/auth/clerk` | Exchange a verified Clerk session for a KCMS workspace session |
 | `GET` | `/api/v1/comments` | Searchable, filterable, stably paginated work list with source context |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
 | `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
@@ -103,25 +104,26 @@ Storage splits along the erasure boundary: `comment_content` is purged when a
 commenter deletes at source; `verdict` and `action` are append-only and survive
 that purge. Deleting speech removes the speech; it does not falsify the audit trail.
 
-## Pilot onboarding
+## Account onboarding
 
 ```
-visitor submits request
+visitor signs up with Clerk
         │
         ▼
-Platform Administrator reviews it
-        │ approved
+KCMS creates one TRIAL workspace
+        │ 7 days
         ▼
-single-use setup link ──▶ client chooses their own password
-        │
-        ▼
-approved workspace owner signs in
+client connects one Page and tests moderation
 ```
 
-The backend never creates or emails a password. New clients receive a random,
-seven-day, single-use setup URL and only its SHA-256 token hash is stored. If the
-email already belongs to a KCMS account, approval upgrades that existing
-workspace instead of creating a duplicate identity.
+Clerk handles identity and social login. KCMS stores the Clerk identity link and
+its own workspace-scoped session. Telegram is not part of the new signup flow.
+The existing pilot-request and invitation routes remain available for
+assisted/business onboarding, but are no longer required for a trial.
+
+Trial workspaces are limited to one connected Page. After seven days, existing
+data remains readable, while new Page connections, comment syncs, and Facebook
+moderation actions are blocked until the workspace is upgraded.
 
 Transactional email is optional. When SMTP is unavailable, the administrative
 response exposes the one-time setup URL to the Platform Administrator for manual
@@ -198,7 +200,7 @@ push produces no deployment.
 |---|---|
 | Build | `pip install uv && uv sync --frozen --no-dev` |
 | Start | `uv run uvicorn kcms.app:app --host 0.0.0.0 --port $PORT` |
-| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_FRONTEND_URL`, `PLATFORM_ADMIN_EMAILS`, optional SMTP and Meta variables |
+| Env | `DATABASE_URL`, `CORS_ORIGINS`, `PUBLIC_FRONTEND_URL`, `CLERK_JWT_ISSUER`, `PLATFORM_ADMIN_EMAILS`, optional SMTP and Meta variables |
 
 Environment variable changes require a redeploy to take effect.
 
@@ -210,6 +212,16 @@ Environment variable changes require a redeploy to take effect.
 Live Facebook verification, comment synchronization, provider-side hide/unhide,
 a full moderation-history endpoint, fleet health and audit views for Platform
 Administration, metrics with meaningful denominators, and rate limiting.
+
+### Clerk configuration
+
+| Variable | Purpose |
+|---|---|
+| `CLERK_JWT_ISSUER` | Clerk Frontend API issuer URL used to validate Clerk session JWTs |
+
+The frontend needs `VITE_CLERK_PUBLISHABLE_KEY`. Configure it in Vercel; do not
+commit either deployment value. Clerk Facebook login is for KCMS identity. The
+separate Meta authorization remains the Page-connection flow.
 
 ### Meta configuration
 

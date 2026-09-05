@@ -21,6 +21,19 @@ SESSION_DAYS = 30
 TRIAL_DAYS = 7
 
 
+def trial_expired(workspace: dict[str, Any], now: datetime | None = None) -> bool:
+    """Return whether this workspace's time-limited trial has ended."""
+    if workspace.get("plan") != "TRIAL":
+        return False
+    expires_at = workspace.get("trial_expires_at")
+    if expires_at is None:
+        return False
+    current = now or datetime.now(UTC)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at <= current
+
+
 async def _issue_session(connection: asyncpg.Connection, user_id: str) -> str:
     token, token_hash = new_session_token()
     await connection.execute(
