@@ -78,7 +78,9 @@ async def approved_client(app) -> httpx.AsyncClient:
     workspace_id = (await client.get("/api/v1/settings")).json()["workspace_id"]
     async with database.acquire() as connection:
         await connection.execute(
-            "UPDATE workspace SET is_sandbox = FALSE WHERE id = $1", workspace_id
+            "UPDATE workspace SET is_sandbox = FALSE, plan = 'STARTER', "
+            "trial_started_at = NULL, trial_expires_at = NULL WHERE id = $1",
+            workspace_id,
         )
     return client
 

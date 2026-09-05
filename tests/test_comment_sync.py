@@ -475,9 +475,8 @@ async def test_a_sample_delete_is_marked_as_not_reaching_facebook(app, meta):
         await client.aclose()
 
 
-async def test_a_harmful_comment_is_auto_removed_on_arrival(app, meta):
-    """Auto-removal is now on by default, so a harmful comment
-    is deleted on arrival."""
+async def test_a_harmful_comment_is_not_auto_removed_on_arrival(app, meta):
+    """Rule-based production workspaces never remove comments automatically."""
     meta.comments = [provider_comment("fb-h-1", "អ្នកនេះឆ្កួតណាស់ ងាប់ទៅ")]
     client = await connected_client(app)
     try:
@@ -489,14 +488,14 @@ async def test_a_harmful_comment_is_auto_removed_on_arrival(app, meta):
         listed = (await client.get("/api/v1/comments", params={"limit": 100})).json()
         row = next(i for i in listed["items"] if i["comment_id"] == "fb-h-1")
         assert row["severity"] == "HARMFUL"
-        assert row["latest_action"] == "DELETE"
-        assert meta.deleted == ["fb-h-1"]
+        assert row["latest_action"] is None
+        assert meta.deleted == []
 
         async with database.acquire() as connection:
             actions = await connection.fetchval(
                 "SELECT COUNT(*) FROM action WHERE comment_id = 'fb-h-1'"
             )
-        assert actions == 1
+        assert actions == 0
     finally:
         await client.aclose()
 

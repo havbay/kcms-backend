@@ -64,9 +64,10 @@ async def _create_sandbox_workspace(
     await connection.execute(
         """INSERT INTO workspace
            (id, name, is_sandbox, plan, trial_started_at, trial_expires_at)
-           VALUES ($1, $2, TRUE, 'TRIAL', $3, $4)""",
+           VALUES ($1, $2, $3, 'TRIAL', $4, $5)""",
         workspace_id,
         name.strip() or "My workspace",
+        settings.public_signup_enabled,
         datetime.now(UTC),
         datetime.now(UTC) + timedelta(days=TRIAL_DAYS),
     )
@@ -74,7 +75,11 @@ async def _create_sandbox_workspace(
         "INSERT INTO membership (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
         workspace_id, user_id,
     )
-    await seed_workspace(connection, workspace_id)
+    # Legacy direct-signup tests explicitly enable this setting and retain the
+    # scripted fixtures needed to exercise moderation behavior. Clerk-created
+    # trial workspaces are always empty and receive only real Page comments.
+    if settings.public_signup_enabled:
+        await seed_workspace(connection, workspace_id)
     return workspace_id
 
 

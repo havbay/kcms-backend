@@ -105,6 +105,7 @@ async def app(meta, monkeypatch):
     # with the exact same key sweep_once will later decrypt with.
     monkeypatch.setattr(app_settings, "meta_graph_version", "v21.0")
     monkeypatch.setattr(app_settings, "integration_encryption_key", Fernet.generate_key().decode())
+    monkeypatch.setattr(app_settings, "auto_removal_enabled", True)
     monkeypatch.setattr("kcms.moderation.quarantine.GraphMetaClient", FakeGraphMetaClient)
     FakeGraphMetaClient.deleted = []
     FakeGraphMetaClient.refuse = False
