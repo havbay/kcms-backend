@@ -688,6 +688,7 @@
           },
           "plan": {
             "enum": [
+              "TRIAL",
               "STARTER",
               "GROWTH"
             ],

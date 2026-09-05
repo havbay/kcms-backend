@@ -55,7 +55,7 @@ class PageConnection(BaseModel):
 
 
 class PageConnections(BaseModel):
-    plan: Literal["STARTER", "GROWTH"]
+    plan: Literal["TRIAL", "STARTER", "GROWTH"]
     page_limit: int
     connections: list[PageConnection]
 

@@ -5,6 +5,7 @@ import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 
+from kcms.api.page_connections import PageConnections
 from kcms.app import create_app
 from kcms.integrations.contracts import ProviderPage
 from kcms.integrations.credentials import get_credential_cipher
@@ -53,6 +54,12 @@ class FakeMetaClient:
                 tasks=("PROFILE_PLUS_MODERATE",),
             )
         ]
+
+
+def test_page_connection_status_accepts_trial_workspaces():
+    status = PageConnections(plan="TRIAL", page_limit=1, connections=[])
+    assert status.plan == "TRIAL"
+    assert status.page_limit == 1
 
 
 async def approved_client(app) -> httpx.AsyncClient:
