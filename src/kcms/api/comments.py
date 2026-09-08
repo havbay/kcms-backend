@@ -127,14 +127,11 @@ async def list_comments(
     query: Annotated[str | None, Query(max_length=200)] = None,
     severity: Annotated[SeverityLabel | None, Query()] = None,
     target: Annotated[TargetLabel | None, Query()] = None,
-    # "cleared" is deliberately absent: the work list excludes cleared rows
-    # before any filter applies, so offering it advertised a value that could
-    # never return a row.
     surfaced_reason: Annotated[
-        Literal["triage", "institution_sample", "novel_language", "uncertainty"] | None,
+        Literal["triage", "institution_sample", "novel_language", "uncertainty", "cleared"] | None,
         Query(),
     ] = None,
-    review_status: Annotated[Literal["PENDING", "ACTIONED"] | None, Query()] = None,
+    review_status: Annotated[Literal["PENDING", "ACTIONED", "ALL"] | None, Query()] = None,
     sort: Annotated[Literal["PRIORITY", "NEWEST", "OLDEST"], Query()] = "PRIORITY",
 ) -> WorkList:
     _require_database()

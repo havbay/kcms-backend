@@ -179,10 +179,12 @@ async def fetch_work_list(
     elif review_status == "ACTIONED":
         conditions.append("a.kind IS NOT NULL")
 
-    # Safe comments are stored for the record but never queued: a moderator
-    # reviewing them is a moderator not reviewing the ones that matter. Only a
-    # verdict of "cleared" is excluded — an abstention still needs a human.
-    conditions.append("v.surfaced_reason <> 'cleared'")
+    # Safe comments are excluded from the work queues by default: a moderator
+    # reviewing them is a moderator not reviewing the ones that matter. The
+    # explicit ALL view is for auditing the classifier and building rules, so
+    # it is the one mode that includes cleared comments.
+    if review_status != "ALL":
+        conditions.append("v.surfaced_reason <> 'cleared'")
 
     where = " WHERE " + " AND ".join(conditions) + CONNECTED_PAGE_ONLY
     order = {

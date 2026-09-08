@@ -247,6 +247,14 @@ async def test_work_list_can_filter_pending_and_actioned_comments(client):
     assert actioned["total"] + pending["total"] == 8
 
 
+async def test_work_list_all_includes_cleared_comments(client):
+    """The audit view exposes safe comments without changing the work queues."""
+    all_comments = (await client.get("/api/v1/comments?review_status=ALL")).json()
+
+    assert all_comments["total"] == 12
+    assert any(item["surfaced_reason"] == "cleared" for item in all_comments["items"])
+
+
 async def test_an_absurd_page_size_is_rejected(client):
     assert (await client.get("/api/v1/comments?limit=5000")).status_code == 422
     assert (await client.get("/api/v1/comments?offset=-1")).status_code == 422

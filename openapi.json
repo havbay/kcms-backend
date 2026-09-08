@@ -3097,7 +3097,8 @@
                     "triage",
                     "institution_sample",
                     "novel_language",
-                    "uncertainty"
+                    "uncertainty",
+                    "cleared"
                   ],
                   "type": "string"
                 },
@@ -3117,7 +3118,8 @@
                 {
                   "enum": [
                     "PENDING",
-                    "ACTIONED"
+                    "ACTIONED",
+                    "ALL"
                   ],
                   "type": "string"
                 },
