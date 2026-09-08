@@ -17,6 +17,8 @@ class MetaClient(Protocol):
     async def fetch_comments(self, page_id: str, token: str) -> list[ProviderComment]: ...
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None: ...
 
+    async def reply_to_comment(self, comment_id: str, token: str, message: str) -> None: ...
+
     async def delete_comment(self, comment_id: str, token: str) -> None: ...
 
 
@@ -322,6 +324,13 @@ class GraphMetaClient:
                     "than by a visitor."
                 ) from exc
             raise
+
+    async def reply_to_comment(self, comment_id: str, token: str, message: str) -> None:
+        """Post one saved reply to a comment on the connected Page."""
+        await self._post(
+            f"{comment_id}/comments",
+            {"message": message, "access_token": token},
+        )
 
 
     async def delete_comment(self, comment_id: str, token: str) -> None:

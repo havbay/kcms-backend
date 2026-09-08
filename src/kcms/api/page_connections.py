@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from kcms.api.auth import current_user
 from kcms.auth import repository as auth_repository
 from kcms.auth.security import hash_session_token
+from kcms.autoreply.service import ReplyProcessingResult, process_new_comments
 from kcms.billing.plans import PLAN_PAGE_LIMITS
 from kcms.integrations import repository
 from kcms.integrations.contracts import ProviderPage
@@ -352,6 +353,8 @@ class SyncResult(BaseModel):
     page_id: str
     page_name: str
     last_synced_at: datetime | None
+    auto_replies_replied: int = 0
+    auto_replies_skipped: int = 0
 
 
 @router.post(
@@ -385,7 +388,7 @@ async def sync_comments(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     async with database.acquire() as connection:
-        imported, to_delete, to_quarantine, to_hide_offensive = (
+        imported, to_delete, to_quarantine, to_hide_offensive, new_comments = (
             await moderation_repository.ingest_provider_comments(
                 connection,
                 workspace["id"],
@@ -399,6 +402,17 @@ async def sync_comments(
         )
         await repository.mark_synced(connection, workspace["id"], page_id)
         refreshed = await repository.get_page_connection(connection, workspace["id"], page_id)
+
+        auto_reply_result = ReplyProcessingResult()
+        if workspace["auto_reply_enabled"] and new_comments:
+            auto_reply_result = await process_new_comments(
+                connection,
+                workspace_id=workspace["id"],
+                enabled=True,
+                comments=new_comments,
+                token=token,
+                meta=meta,
+            )
 
     # Harmful comments are removed from the Page without waiting for a
     # reviewer — deleted outright with no quarantine delay configured, or
@@ -438,4 +452,6 @@ async def sync_comments(
         page_id=found["page_id"],
         page_name=found["page_name"],
         last_synced_at=refreshed["last_synced_at"] if refreshed else None,
+        auto_replies_replied=auto_reply_result.replied,
+        auto_replies_skipped=auto_reply_result.skipped,
     )

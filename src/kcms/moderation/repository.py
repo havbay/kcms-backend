@@ -8,7 +8,7 @@ from typing import Any
 import asyncpg
 
 from kcms.integrations.contracts import ProviderComment
-from kcms.moderation.contracts import CommentContext, Severity
+from kcms.moderation.contracts import CommentContext, Severity, Verdict
 from kcms.moderation.pattern_matcher import PatternMatcher, auto_removable
 from kcms.moderation.seeds import PAGE_ID, SEED_COMMENTS
 from kcms.settings import settings
@@ -339,7 +339,7 @@ async def ingest_provider_comments(
     auto_hide_offensive: bool = False,
     keyword_allowlist: Sequence[str] = (),
     keyword_blocklist: Sequence[str] = (),
-) -> tuple[int, list[str], list[str], list[str]]:
+) -> tuple[int, list[str], list[str], list[str], list[tuple[ProviderComment, Verdict]]]:
     """Store comments pulled from the provider and classify the new ones.
 
     The provider's own comment id is the primary key, so re-syncing the same
@@ -348,13 +348,13 @@ async def ingest_provider_comments(
 
     Returns the number imported, the comment ids to delete from Facebook now,
     the comment ids to hide now for quarantine (with their deletion scheduled
-    for later), and the comment ids to hide now because they are OFFENSIVE
-    and this workspace auto-hides those (never scheduled for deletion — a
-    person still decides). Mirroring those to Facebook is the caller's job:
-    this function owns the database, not the network.
+    for later), the comment ids to hide now because they are OFFENSIVE and this
+    workspace auto-hides those, and the new comments with their stored
+    verdicts. Mirroring those to Facebook is the caller's job: this function
+    owns the database, not the network.
     """
     if not comments:
-        return 0, [], [], []
+        return 0, [], [], [], []
 
     existing = {
         row["comment_id"]
@@ -365,7 +365,7 @@ async def ingest_provider_comments(
     }
     fresh = [c for c in comments if c.comment_id not in existing]
     if not fresh:
-        return 0, [], [], []
+        return 0, [], [], [], []
 
     contexts = [
         CommentContext(
@@ -436,7 +436,13 @@ async def ingest_provider_comments(
                     connection, comment.comment_id, "HIDE", "system:auto-hide-offensive"
                 )
                 to_hide_offensive.append(comment.comment_id)
-    return len(fresh), to_delete, to_quarantine, to_hide_offensive
+    return (
+        len(fresh),
+        to_delete,
+        to_quarantine,
+        to_hide_offensive,
+        list(zip(fresh, verdicts, strict=True)),
+    )
 
 
 async def comment_page_id(

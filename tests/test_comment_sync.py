@@ -36,6 +36,7 @@ class RecordingMetaClient:
     def __init__(self):
         self.deleted: list[str] = []
         self.hidden: list[tuple[str, bool]] = []
+        self.replied: list[tuple[str, str]] = []
         self.comments: list[ProviderComment] = []
         self.refuse = False
 
@@ -71,6 +72,11 @@ class RecordingMetaClient:
         if self.refuse:
             raise ValueError("Meta rejected the request: permission missing")
         self.deleted.append(comment_id)
+
+    async def reply_to_comment(self, comment_id: str, token: str, message: str) -> None:
+        if self.refuse:
+            raise ValueError("Meta rejected the request: permission missing")
+        self.replied.append((comment_id, message))
 
 
 def provider_comment(comment_id: str, text: str) -> ProviderComment:
@@ -113,6 +119,9 @@ async def app(meta):
                     "(SELECT comment_id FROM comment_content WHERE page_id = $1)",
                     PAGE_ID,
                 )
+            await connection.execute(
+                "DELETE FROM auto_reply_event WHERE provider_event_id LIKE 'fb-%'"
+            )
             await connection.execute("DELETE FROM comment_content WHERE page_id = $1", PAGE_ID)
         yield application
 
@@ -157,6 +166,72 @@ async def test_sync_imports_page_comments_into_the_work_list(app, meta):
         # A verdict is produced on arrival, so the comment is triaged, not raw.
         assert items[0]["severity"] is not None
         assert items[0]["page_id"] == PAGE_ID
+    finally:
+        await client.aclose()
+
+
+async def test_live_auto_reply_posts_a_new_safe_matching_comment_and_logs_it(app, meta):
+    meta.comments = [provider_comment("fb-reply-1", "What is the price?")]
+    client = await connected_client(app)
+    try:
+        created = await client.post(
+            "/api/v1/auto-replies/rules",
+            json={
+                "name": "Price question",
+                "keywords": ["price"],
+                "reply_body": "Please message us for today's price.",
+                "on_comments": True,
+                "on_messages": False,
+                "enabled": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        enabled = await client.patch(
+            "/api/v1/auto-replies/settings", json={"enabled": True}
+        )
+        assert enabled.status_code == 200, enabled.text
+
+        synced = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+
+        assert synced.status_code == 200, synced.text
+        assert synced.json()["auto_replies_replied"] == 1
+        assert meta.replied == [("fb-reply-1", "Please message us for today's price.")]
+
+        repeated = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+        assert repeated.json()["imported"] == 0
+        assert meta.replied == [("fb-reply-1", "Please message us for today's price.")]
+
+        events = await client.get("/api/v1/auto-replies/events")
+        assert events.status_code == 200, events.text
+        assert events.json()[0]["decision"] == "replied"
+        assert events.json()[0]["provider_applied"] is True
+    finally:
+        await client.aclose()
+
+
+async def test_unmatched_safe_comment_is_silent_and_logged(app, meta):
+    meta.comments = [provider_comment("fb-no-match-1", "Hello there")]
+    client = await connected_client(app)
+    try:
+        created = await client.post(
+            "/api/v1/auto-replies/rules",
+            json={
+                "name": "Price question",
+                "keywords": ["price"],
+                "reply_body": "Please message us.",
+                "enabled": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        await client.patch("/api/v1/auto-replies/settings", json={"enabled": True})
+
+        synced = await client.post(f"/api/v1/facebook/connections/{PAGE_ID}/sync")
+
+        assert synced.json()["auto_replies_replied"] == 0
+        assert meta.replied == []
+        event = (await client.get("/api/v1/auto-replies/events")).json()[0]
+        assert event["decision"] == "skipped"
+        assert event["reason"] == "no enabled rule matched"
     finally:
         await client.aclose()
 

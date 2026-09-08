@@ -273,6 +273,24 @@ async def test_other_hide_failures_are_not_disguised(monkeypatch):
     assert "190" in str(refused.value)
 
 
+async def test_reply_to_comment_uses_the_comment_replies_edge(monkeypatch):
+    client = _graph_client()
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    async def fake_post(path, params):
+        calls.append((path, params))
+        return {"id": "reply-1"}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    await client.reply_to_comment("comment-1", "page-token", "Thanks for asking!")
+
+    assert calls == [(
+        "comment-1/comments",
+        {"message": "Thanks for asking!", "access_token": "page-token"},
+    )]
+
+
 def test_business_login_configuration_is_optional():
     """config_id selects a Facebook Login for Business configuration. Without
     one Meta runs classic login against the requested scopes, so requiring it

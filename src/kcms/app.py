@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from kcms.api import (
     auth,
+    auto_reply,
     comments,
     health,
     page_connections,
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(auto_reply.router)
     app.include_router(comments.router)
     app.include_router(page_connections.router)
     app.include_router(pilot_requests.router)

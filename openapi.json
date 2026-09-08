@@ -135,6 +135,268 @@
         "title": "AuthUser",
         "type": "object"
       },
+      "AutoReplyEvent": {
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "provider_applied": {
+            "title": "Provider Applied",
+            "type": "boolean"
+          },
+          "provider_event_id": {
+            "title": "Provider Event Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "reply_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Body"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          }
+        },
+        "required": [
+          "id",
+          "rule_id",
+          "provider_event_id",
+          "channel",
+          "decision",
+          "reason",
+          "reply_body",
+          "provider_applied",
+          "occurred_at"
+        ],
+        "title": "AutoReplyEvent",
+        "type": "object"
+      },
+      "AutoReplyRuleInput": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "on_comments": {
+            "default": true,
+            "title": "On Comments",
+            "type": "boolean"
+          },
+          "on_messages": {
+            "default": false,
+            "title": "On Messages",
+            "type": "boolean"
+          },
+          "reply_body": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reply Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "keywords",
+          "reply_body"
+        ],
+        "title": "AutoReplyRuleInput",
+        "type": "object"
+      },
+      "AutoReplyRulePatch": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "on_comments": {
+            "default": true,
+            "title": "On Comments",
+            "type": "boolean"
+          },
+          "on_messages": {
+            "default": false,
+            "title": "On Messages",
+            "type": "boolean"
+          },
+          "reply_body": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reply Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "keywords",
+          "reply_body"
+        ],
+        "title": "AutoReplyRulePatch",
+        "type": "object"
+      },
+      "AutoReplyRuleResponse": {
+        "properties": {
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "on_comments": {
+            "default": true,
+            "title": "On Comments",
+            "type": "boolean"
+          },
+          "on_messages": {
+            "default": false,
+            "title": "On Messages",
+            "type": "boolean"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "reply_body": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reply Body",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "keywords",
+          "reply_body",
+          "id",
+          "position",
+          "warnings"
+        ],
+        "title": "AutoReplyRuleResponse",
+        "type": "object"
+      },
+      "AutoReplySettings": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "your_role": {
+            "title": "Your Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "your_role"
+        ],
+        "title": "AutoReplySettings",
+        "type": "object"
+      },
+      "AutoReplySettingsPatch": {
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          }
+        },
+        "title": "AutoReplySettingsPatch",
+        "type": "object"
+      },
       "CorrectionRequest": {
         "properties": {
           "note": {
@@ -979,6 +1241,24 @@
         "title": "RenameWorkspace",
         "type": "object"
       },
+      "ReorderRules": {
+        "properties": {
+          "rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 0,
+            "title": "Rule Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rule_ids"
+        ],
+        "title": "ReorderRules",
+        "type": "object"
+      },
       "SampleRemoval": {
         "properties": {
           "removed": {
@@ -1150,6 +1430,78 @@
         "title": "SignInRequest",
         "type": "object"
       },
+      "SimulationInput": {
+        "properties": {
+          "channel": {
+            "default": "comments",
+            "enum": [
+              "comments",
+              "messages"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 5000,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SimulationInput",
+        "type": "object"
+      },
+      "SimulationResponse": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reply_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Body"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          }
+        },
+        "required": [
+          "kind",
+          "rule_id",
+          "reply_body",
+          "reason"
+        ],
+        "title": "SimulationResponse",
+        "type": "object"
+      },
       "Summary": {
         "description": "Counts computed across the whole workspace, not from one page.",
         "properties": {
@@ -1199,6 +1551,16 @@
       },
       "SyncResult": {
         "properties": {
+          "auto_replies_replied": {
+            "default": 0,
+            "title": "Auto Replies Replied",
+            "type": "integer"
+          },
+          "auto_replies_skipped": {
+            "default": 0,
+            "title": "Auto Replies Skipped",
+            "type": "integer"
+          },
           "fetched": {
             "title": "Fetched",
             "type": "integer"
@@ -2143,6 +2505,499 @@
           }
         },
         "summary": "Sign In With Telegram"
+      }
+    },
+    "/api/v1/auto-replies/events": {
+      "get": {
+        "operationId": "listAutoReplyEvents",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutoReplyEvent"
+                  },
+                  "title": "Response Listautoreplyevents",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Auto Reply Events"
+      }
+    },
+    "/api/v1/auto-replies/rules": {
+      "get": {
+        "operationId": "listAutoReplyRules",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutoReplyRuleResponse"
+                  },
+                  "title": "Response Listautoreplyrules",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Auto Reply Rules"
+      },
+      "post": {
+        "operationId": "createAutoReplyRule",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoReplyRuleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplyRuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Auto Reply Rule"
+      }
+    },
+    "/api/v1/auto-replies/rules/reorder": {
+      "post": {
+        "operationId": "reorderAutoReplyRules",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderRules"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutoReplyRuleResponse"
+                  },
+                  "title": "Response Reorderautoreplyrules",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Reorder Auto Reply Rules"
+      }
+    },
+    "/api/v1/auto-replies/rules/{rule_id}": {
+      "delete": {
+        "operationId": "deleteAutoReplyRule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Auto Reply Rule"
+      },
+      "patch": {
+        "operationId": "updateAutoReplyRule",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoReplyRulePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplyRuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Auto Reply Rule"
+      }
+    },
+    "/api/v1/auto-replies/settings": {
+      "get": {
+        "operationId": "getAutoReplySettings",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Auto Reply Settings"
+      },
+      "patch": {
+        "operationId": "patchAutoReplySettings",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoReplySettingsPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoReplySettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Auto Reply Settings"
+      }
+    },
+    "/api/v1/auto-replies/simulate": {
+      "post": {
+        "operationId": "simulateAutoReply",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimulationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SimulationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulate Auto Reply"
       }
     },
     "/api/v1/comments": {
