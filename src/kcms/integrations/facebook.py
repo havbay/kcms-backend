@@ -308,10 +308,16 @@ class GraphMetaClient:
     async def set_comment_hidden(self, comment_id: str, token: str, hidden: bool) -> None:
         """Hide or unhide one comment on the Page itself."""
         try:
-            await self._post(
+            result = await self._post(
                 comment_id,
                 {"is_hidden": "true" if hidden else "false", "access_token": token},
             )
+            if result.get("success") is False:
+                raise ValueError(
+                    "Meta rejected the request: Facebook did not apply the "
+                    + ("hide" if hidden else "unhide")
+                    + " operation"
+                )
         except ValueError as exc:
             # Facebook refuses to hide a comment the Page itself wrote, and
             # reports it as a bare "(#200) Can not hide or unhide this

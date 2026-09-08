@@ -296,7 +296,7 @@ async def record_action(
 
 async def fetch_history(connection: asyncpg.Connection, comment_id: str) -> list[dict[str, Any]]:
     rows = await connection.fetch(
-        """SELECT kind, actor, occurred_at FROM action
+        """SELECT kind, actor, occurred_at, provider_applied FROM action
            WHERE comment_id = $1 ORDER BY occurred_at DESC, id DESC""",
         comment_id,
     )

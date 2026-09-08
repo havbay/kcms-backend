@@ -588,12 +588,17 @@
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
+          },
+          "provider_applied": {
+            "title": "Provider Applied",
+            "type": "boolean"
           }
         },
         "required": [
           "kind",
           "actor",
-          "occurred_at"
+          "occurred_at",
+          "provider_applied"
         ],
         "title": "HistoryEntry",
         "type": "object"

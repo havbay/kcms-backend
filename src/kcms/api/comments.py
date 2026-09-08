@@ -94,6 +94,7 @@ class HistoryEntry(BaseModel):
     kind: str
     actor: str
     occurred_at: datetime
+    provider_applied: bool
 
 
 class CorrectionRequest(BaseModel):

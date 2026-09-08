@@ -273,6 +273,19 @@ async def test_other_hide_failures_are_not_disguised(monkeypatch):
     assert "190" in str(refused.value)
 
 
+async def test_hide_rejects_a_success_false_graph_response(monkeypatch):
+    client = _graph_client()
+
+    async def fake_post(path, params):
+        return {"success": False}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    with pytest.raises(ValueError) as refused:
+        await client.set_comment_hidden("c-1", "page-token", hidden=True)
+    assert "did not apply the hide operation" in str(refused.value)
+
+
 async def test_reply_to_comment_uses_the_comment_replies_edge(monkeypatch):
     client = _graph_client()
     calls: list[tuple[str, dict[str, str]]] = []

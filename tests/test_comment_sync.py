@@ -615,6 +615,7 @@ async def test_hiding_a_page_comment_is_applied_on_facebook(app, meta):
         )
         assert hidden.status_code == 201, hidden.text
         assert meta.hidden == [("fb-hide-1", True)]
+        assert hidden.json()[0]["provider_applied"] is True
 
         shown = await client.post(
             "/api/v1/comments/fb-hide-1/actions", json={"kind": "UNHIDE"}
@@ -680,6 +681,7 @@ async def test_hiding_a_sample_comment_never_calls_facebook(app, meta):
             f"/api/v1/comments/{seeded_id}/actions", json={"kind": "HIDE"}
         )
         assert acted.status_code == 201, acted.text
+        assert acted.json()[0]["provider_applied"] is False
         assert meta.hidden == []
     finally:
         await client.aclose()
