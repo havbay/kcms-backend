@@ -20,6 +20,407 @@
         "title": "ActionRequest",
         "type": "object"
       },
+      "AdminAccess": {
+        "properties": {
+          "admins": {
+            "items": {
+              "$ref": "#/components/schemas/AdminAccount"
+            },
+            "title": "Admins",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "mfa": {
+            "const": "not_configured",
+            "title": "Mfa",
+            "type": "string"
+          },
+          "role_management": {
+            "const": "deployment_allowlist",
+            "title": "Role Management",
+            "type": "string"
+          }
+        },
+        "required": [
+          "admins",
+          "role_management",
+          "mfa",
+          "generated_at"
+        ],
+        "title": "AdminAccess",
+        "type": "object"
+      },
+      "AdminAccount": {
+        "properties": {
+          "active_session_count": {
+            "title": "Active Session Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "latest_session_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Session At"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "created_at",
+          "active_session_count",
+          "latest_session_at"
+        ],
+        "title": "AdminAccount",
+        "type": "object"
+      },
+      "AdminAuditEvent": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "target_id": {
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "target_type",
+          "target_id",
+          "metadata",
+          "created_at",
+          "actor"
+        ],
+        "title": "AdminAuditEvent",
+        "type": "object"
+      },
+      "AdminIntegration": {
+        "properties": {
+          "connected_at": {
+            "format": "date-time",
+            "title": "Connected At",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "HEALTHY",
+              "STALE",
+              "NEVER_SYNCED",
+              "SUSPENDED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "workspace_name": {
+            "title": "Workspace Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page_id",
+          "page_name",
+          "method",
+          "tasks",
+          "connected_at",
+          "last_synced_at",
+          "workspace_id",
+          "workspace_name",
+          "status"
+        ],
+        "title": "AdminIntegration",
+        "type": "object"
+      },
+      "AdminIntegrationHealth": {
+        "properties": {
+          "attention": {
+            "title": "Attention",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "healthy": {
+            "title": "Healthy",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminIntegration"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "healthy",
+          "attention",
+          "generated_at"
+        ],
+        "title": "AdminIntegrationHealth",
+        "type": "object"
+      },
+      "AdminMember": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "role",
+          "created_at"
+        ],
+        "title": "AdminMember",
+        "type": "object"
+      },
+      "AdminOverview": {
+        "properties": {
+          "active_workspaces": {
+            "title": "Active Workspaces",
+            "type": "integer"
+          },
+          "comments_processed_7d": {
+            "title": "Comments Processed 7D",
+            "type": "integer"
+          },
+          "connected_pages": {
+            "title": "Connected Pages",
+            "type": "integer"
+          },
+          "expired_workspaces": {
+            "title": "Expired Workspaces",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "integration_attention": {
+            "title": "Integration Attention",
+            "type": "integer"
+          },
+          "pending_access_requests": {
+            "title": "Pending Access Requests",
+            "type": "integer"
+          },
+          "recent_workspaces": {
+            "items": {
+              "$ref": "#/components/schemas/AdminWorkspaceSummary"
+            },
+            "title": "Recent Workspaces",
+            "type": "array"
+          },
+          "replies_sent_7d": {
+            "title": "Replies Sent 7D",
+            "type": "integer"
+          },
+          "reply_failures_7d": {
+            "title": "Reply Failures 7D",
+            "type": "integer"
+          },
+          "suspended_workspaces": {
+            "title": "Suspended Workspaces",
+            "type": "integer"
+          },
+          "total_workspaces": {
+            "title": "Total Workspaces",
+            "type": "integer"
+          },
+          "trial_workspaces": {
+            "title": "Trial Workspaces",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_workspaces",
+          "active_workspaces",
+          "trial_workspaces",
+          "expired_workspaces",
+          "suspended_workspaces",
+          "connected_pages",
+          "integration_attention",
+          "comments_processed_7d",
+          "replies_sent_7d",
+          "reply_failures_7d",
+          "pending_access_requests",
+          "generated_at",
+          "recent_workspaces"
+        ],
+        "title": "AdminOverview",
+        "type": "object"
+      },
+      "AdminPage": {
+        "properties": {
+          "connected_at": {
+            "format": "date-time",
+            "title": "Connected At",
+            "type": "string"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "page_id": {
+            "title": "Page Id",
+            "type": "string"
+          },
+          "page_name": {
+            "title": "Page Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "HEALTHY",
+              "STALE",
+              "NEVER_SYNCED",
+              "SUSPENDED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_id",
+          "page_name",
+          "method",
+          "tasks",
+          "connected_at",
+          "last_synced_at",
+          "status"
+        ],
+        "title": "AdminPage",
+        "type": "object"
+      },
       "AdminPilotRequest": {
         "properties": {
           "created_at": {
@@ -110,6 +511,463 @@
           "created_at"
         ],
         "title": "AdminPilotRequest",
+        "type": "object"
+      },
+      "AdminPlan": {
+        "properties": {
+          "page_limit": {
+            "title": "Page Limit",
+            "type": "integer"
+          },
+          "plan": {
+            "enum": [
+              "TRIAL",
+              "STARTER",
+              "GROWTH"
+            ],
+            "title": "Plan",
+            "type": "string"
+          },
+          "suspended_count": {
+            "title": "Suspended Count",
+            "type": "integer"
+          },
+          "workspace_count": {
+            "title": "Workspace Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plan",
+          "page_limit",
+          "workspace_count",
+          "suspended_count"
+        ],
+        "title": "AdminPlan",
+        "type": "object"
+      },
+      "AdminPlanOverview": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPlan"
+            },
+            "title": "Plans",
+            "type": "array"
+          }
+        },
+        "required": [
+          "plans",
+          "generated_at"
+        ],
+        "title": "AdminPlanOverview",
+        "type": "object"
+      },
+      "AdminSessionRevocation": {
+        "properties": {
+          "revoked_sessions": {
+            "title": "Revoked Sessions",
+            "type": "integer"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "revoked_sessions"
+        ],
+        "title": "AdminSessionRevocation",
+        "type": "object"
+      },
+      "AdminWorkspaceDetail": {
+        "properties": {
+          "auto_reply_enabled": {
+            "title": "Auto Reply Enabled",
+            "type": "boolean"
+          },
+          "comments_processed": {
+            "title": "Comments Processed",
+            "type": "integer"
+          },
+          "comments_processed_7d": {
+            "title": "Comments Processed 7D",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_sandbox": {
+            "title": "Is Sandbox",
+            "type": "boolean"
+          },
+          "is_suspended": {
+            "title": "Is Suspended",
+            "type": "boolean"
+          },
+          "latest_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Activity At"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/AdminMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/AdminWorkspaceMetrics"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "page_count": {
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "page_limit": {
+            "title": "Page Limit",
+            "type": "integer"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/AdminPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "pending_comments": {
+            "title": "Pending Comments",
+            "type": "integer"
+          },
+          "plan": {
+            "title": "Plan",
+            "type": "string"
+          },
+          "replies_sent_7d": {
+            "title": "Replies Sent 7D",
+            "type": "integer"
+          },
+          "reply_failures_7d": {
+            "title": "Reply Failures 7D",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "SANDBOX",
+              "TRIAL",
+              "ACTIVE",
+              "EXPIRED",
+              "SUSPENDED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trial_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Expires At"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plan",
+          "status",
+          "is_sandbox",
+          "is_suspended",
+          "page_limit",
+          "trial_expires_at",
+          "created_at",
+          "member_count",
+          "page_count",
+          "comments_processed",
+          "comments_processed_7d",
+          "pending_comments",
+          "replies_sent_7d",
+          "reply_failures_7d",
+          "auto_reply_enabled",
+          "latest_activity_at",
+          "owner_name",
+          "members",
+          "pages",
+          "metrics"
+        ],
+        "title": "AdminWorkspaceDetail",
+        "type": "object"
+      },
+      "AdminWorkspaceEntitlementPatch": {
+        "properties": {
+          "plan": {
+            "anyOf": [
+              {
+                "enum": [
+                  "TRIAL",
+                  "STARTER",
+                  "GROWTH"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "suspended": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suspended"
+          }
+        },
+        "title": "AdminWorkspaceEntitlementPatch",
+        "type": "object"
+      },
+      "AdminWorkspaceList": {
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AdminWorkspaceSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "generated_at"
+        ],
+        "title": "AdminWorkspaceList",
+        "type": "object"
+      },
+      "AdminWorkspaceMetrics": {
+        "properties": {
+          "comments_processed": {
+            "title": "Comments Processed",
+            "type": "integer"
+          },
+          "comments_processed_7d": {
+            "title": "Comments Processed 7D",
+            "type": "integer"
+          },
+          "pending_comments": {
+            "title": "Pending Comments",
+            "type": "integer"
+          },
+          "replies_sent_7d": {
+            "title": "Replies Sent 7D",
+            "type": "integer"
+          },
+          "reply_failures_7d": {
+            "title": "Reply Failures 7D",
+            "type": "integer"
+          },
+          "reviewed_comments": {
+            "title": "Reviewed Comments",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "comments_processed",
+          "comments_processed_7d",
+          "pending_comments",
+          "reviewed_comments",
+          "replies_sent_7d",
+          "reply_failures_7d"
+        ],
+        "title": "AdminWorkspaceMetrics",
+        "type": "object"
+      },
+      "AdminWorkspaceSummary": {
+        "properties": {
+          "auto_reply_enabled": {
+            "title": "Auto Reply Enabled",
+            "type": "boolean"
+          },
+          "comments_processed": {
+            "title": "Comments Processed",
+            "type": "integer"
+          },
+          "comments_processed_7d": {
+            "title": "Comments Processed 7D",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_sandbox": {
+            "title": "Is Sandbox",
+            "type": "boolean"
+          },
+          "is_suspended": {
+            "title": "Is Suspended",
+            "type": "boolean"
+          },
+          "latest_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Activity At"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "page_count": {
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "page_limit": {
+            "title": "Page Limit",
+            "type": "integer"
+          },
+          "pending_comments": {
+            "title": "Pending Comments",
+            "type": "integer"
+          },
+          "plan": {
+            "title": "Plan",
+            "type": "string"
+          },
+          "replies_sent_7d": {
+            "title": "Replies Sent 7D",
+            "type": "integer"
+          },
+          "reply_failures_7d": {
+            "title": "Reply Failures 7D",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "SANDBOX",
+              "TRIAL",
+              "ACTIVE",
+              "EXPIRED",
+              "SUSPENDED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "trial_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Expires At"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plan",
+          "status",
+          "is_sandbox",
+          "is_suspended",
+          "page_limit",
+          "trial_expires_at",
+          "created_at",
+          "member_count",
+          "page_count",
+          "comments_processed",
+          "comments_processed_7d",
+          "pending_comments",
+          "replies_sent_7d",
+          "reply_failures_7d",
+          "auto_reply_enabled",
+          "latest_activity_at"
+        ],
+        "title": "AdminWorkspaceSummary",
         "type": "object"
       },
       "AuthUser": {
@@ -2150,6 +3008,311 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/admin/access": {
+      "get": {
+        "operationId": "getAdminAccess",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccess"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Access"
+      }
+    },
+    "/api/v1/admin/access/{user_id}/revoke-sessions": {
+      "post": {
+        "operationId": "revokeAdminSessions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSessionRevocation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Admin Sessions"
+      }
+    },
+    "/api/v1/admin/audit-log": {
+      "get": {
+        "operationId": "listAdminAuditLog",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdminAuditEvent"
+                  },
+                  "title": "Response Listadminauditlog",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Admin Audit Log"
+      }
+    },
+    "/api/v1/admin/integrations": {
+      "get": {
+        "operationId": "getAdminIntegrationHealth",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminIntegrationHealth"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Integration Health"
+      }
+    },
+    "/api/v1/admin/overview": {
+      "get": {
+        "operationId": "getAdminOverview",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Overview"
+      }
+    },
     "/api/v1/admin/pilot-requests": {
       "get": {
         "operationId": "listPilotRequests",
@@ -2284,6 +3447,258 @@
           }
         },
         "summary": "Decide Pilot Request"
+      }
+    },
+    "/api/v1/admin/plans": {
+      "get": {
+        "operationId": "getAdminPlanOverview",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPlanOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Plan Overview"
+      }
+    },
+    "/api/v1/admin/workspaces": {
+      "get": {
+        "operationId": "listAdminWorkspaces",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkspaceList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Workspaces"
+      }
+    },
+    "/api/v1/admin/workspaces/{workspace_id}": {
+      "get": {
+        "operationId": "getAdminWorkspace",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkspaceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Admin Workspace"
+      }
+    },
+    "/api/v1/admin/workspaces/{workspace_id}/entitlement": {
+      "patch": {
+        "operationId": "patchAdminWorkspaceEntitlement",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminWorkspaceEntitlementPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWorkspaceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Admin Workspace Entitlement"
       }
     },
     "/api/v1/auth/clerk": {

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kcms.api import (
+    admin,
     auth,
     auto_reply,
     comments,
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health.router)
+    app.include_router(admin.router)
     app.include_router(auth.router)
     app.include_router(auto_reply.router)
     app.include_router(comments.router)

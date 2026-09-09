@@ -280,6 +280,13 @@ async def test_facebook_login_lists_pages_without_exposing_their_tokens(app):
         assert selected.json()["method"] == "FACEBOOK_LOGIN"
         assert selected.json()["page_id"] == "page-456"
         assert "oauth-page-token-secret" not in selected.text
+
+        # The chooser response is only an immediate confirmation. A later
+        # dashboard load must read the same connection back from persistence.
+        listed = await client.get("/api/v1/facebook/connections")
+        assert listed.status_code == 200, listed.text
+        assert [row["page_id"] for row in listed.json()["connections"]] == ["page-456"]
+
         assert (
             await client.post(
                 f"/api/v1/facebook/oauth/sessions/{state}/selection",

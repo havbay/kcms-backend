@@ -87,12 +87,12 @@ async def workspace_for_user(
     connection: asyncpg.Connection, user_id: str
 ) -> dict[str, Any] | None:
     row = await connection.fetchrow(
-        """SELECT w.id, w.name, w.is_sandbox, w.plan, w.trial_started_at,
+        """SELECT w.id, w.name, w.is_sandbox, w.is_suspended, w.plan, w.trial_started_at,
                          w.trial_expires_at, w.auto_delete_delay_minutes,
                          w.auto_hide_offensive, w.keyword_allowlist, w.keyword_blocklist,
                          w.auto_reply_enabled, m.role
            FROM membership m JOIN workspace w ON w.id = m.workspace_id
-           WHERE m.user_id = $1
+           WHERE m.user_id = $1 AND w.is_suspended = FALSE
            -- A joined team workspace wins over the personal sandbox, so
            -- accepting an invitation actually lands the person in that team.
            ORDER BY (w.id = m.workspace_id AND m.role = 'owner' AND w.is_sandbox) ASC,

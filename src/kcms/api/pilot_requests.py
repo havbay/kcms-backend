@@ -4,6 +4,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr, Field
 
+from kcms.admin import repository as admin_repository
 from kcms.api.auth import Session, _as_auth_user, require_platform_admin
 from kcms.notifications.contracts import Notification, NotificationSender
 from kcms.notifications.smtp import DisabledNotificationSender, SmtpNotificationSender
@@ -185,6 +186,15 @@ async def decide_pilot_request(
         )
     if not decided:
         raise HTTPException(status.HTTP_409_CONFLICT, "request is missing or already decided")
+    async with database.acquire() as connection:
+        await admin_repository.record_audit(
+            connection,
+            actor_user_id=admin["id"],
+            action="DECIDE_PILOT_REQUEST",
+            target_type="pilot_request",
+            target_id=request_id,
+            metadata={"decision": body.decision},
+        )
 
     invitation_url = None
     if decided["token"]:
