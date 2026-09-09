@@ -6,6 +6,7 @@ import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 
+from kcms.api import auth as auth_api
 from kcms.app import create_app
 from kcms.settings import settings
 from kcms.shared.database import database
@@ -51,6 +52,56 @@ async def test_platform_admin_dashboard_is_denied_to_clients(app):
             "/api/v1/admin/audit-log",
         ):
             assert (await client.get(path)).status_code == 403
+    finally:
+        await client.aclose()
+
+
+async def test_admin_clerk_exchange_rejects_non_allowlisted_identity(app, monkeypatch):
+    monkeypatch.setattr(
+        auth_api,
+        "_verify_clerk_token",
+        lambda _: auth_api.ClerkClaims(sub=f"clerk-{uuid.uuid4().hex}", email="client@example.com"),
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    try:
+        response = await client.post(
+            "/api/v1/admin/auth/clerk",
+            headers={"Authorization": "Bearer verified-clerk-token"},
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "platform administration required"
+    finally:
+        await client.aclose()
+
+
+async def test_admin_clerk_exchange_provisions_allowlisted_identity(app, monkeypatch):
+    email = f"clerk-admin-{uuid.uuid4().hex[:8]}@example.com"
+    clerk_id = f"clerk-{uuid.uuid4().hex}"
+    monkeypatch.setattr(settings, "platform_admin_emails", email)
+    monkeypatch.setattr(
+        auth_api,
+        "_verify_clerk_token",
+        lambda _: auth_api.ClerkClaims(
+            sub=clerk_id, email=email, name="Clerk Platform Admin"
+        ),
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    try:
+        response = await client.post(
+            "/api/v1/admin/auth/clerk",
+            headers={"Authorization": "Bearer verified-clerk-token"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["user"]["is_platform_admin"] is True
+
+        client.headers["Authorization"] = f"Bearer {body['token']}"
+        overview = await client.get("/api/v1/admin/overview")
+        assert overview.status_code == 200, overview.text
     finally:
         await client.aclose()
 

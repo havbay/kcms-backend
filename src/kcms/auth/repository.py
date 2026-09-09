@@ -258,7 +258,6 @@ async def sign_in_with_clerk(
         )
         if row:
             user_id, name = row["id"], row["display_name"]
-            is_admin = bool(row["is_platform_admin"])
         else:
             existing_id = None
             if email:
@@ -276,7 +275,11 @@ async def sign_in_with_clerk(
                 user_id,
                 clerk_user_id,
             )
-            is_admin = False
+        # Reconcile the deployment-managed allowlist on every Clerk sign-in.
+        # This keeps existing Clerk identities in step with changes to
+        # PLATFORM_ADMIN_EMAILS and makes the dedicated admin exchange
+        # authoritative instead of trusting a stale database flag.
+        is_admin = await _sync_platform_admin(connection, user_id, email or "")
         token = await _issue_session(connection, user_id)
     return token, {
         "id": user_id,

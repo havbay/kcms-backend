@@ -93,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(admin.router)
     app.include_router(auth.router)
+    app.include_router(auth.admin_router)
     app.include_router(auto_reply.router)
     app.include_router(comments.router)
     app.include_router(page_connections.router)

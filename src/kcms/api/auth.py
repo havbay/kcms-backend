@@ -10,6 +10,7 @@ from kcms.settings import settings
 from kcms.shared.database import database
 
 router = APIRouter(prefix="/api/v1/auth")
+admin_router = APIRouter(prefix="/api/v1/admin/auth")
 
 
 class SignUpRequest(BaseModel):
@@ -187,6 +188,34 @@ async def sign_in_with_clerk(
     async with database.acquire() as connection:
         token, user = await repository.sign_in_with_clerk(
             connection, claims.sub, claims.email, name
+        )
+    return Session(token=token, user=_as_auth_user(user))
+
+
+@admin_router.post("/clerk", operation_id="signInAdminWithClerk", response_model=Session)
+async def sign_in_admin_with_clerk(
+    authorization: Annotated[str | None, Header()] = None,
+) -> Session:
+    """Exchange Clerk only for an operator on the deployment allowlist.
+
+    Customer sign-in stays on ``/api/v1/auth/clerk``. This separate exchange
+    prevents a normal customer session from becoming a platform session just
+    because the browser visited an admin URL; the allowlist is checked before
+    any KCMS account/session is provisioned.
+    """
+    _require_database()
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
+    claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
+    email = (claims.email or "").strip().lower()
+    if not email or email not in settings.platform_admin_email_set:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "platform administration required")
+    name = claims.name or " ".join(part for part in (claims.first_name, claims.last_name) if part)
+    if not name:
+        name = email.split("@", 1)[0]
+    async with database.acquire() as connection:
+        token, user = await repository.sign_in_with_clerk(
+            connection, claims.sub, email, name
         )
     return Session(token=token, user=_as_auth_user(user))
 
