@@ -179,15 +179,15 @@ async def _primary_clerk_email(claims: ClerkClaims) -> str | None:
     """Return the verified primary email for a Clerk session.
 
     Custom Clerk JWT templates may include ``email`` directly. The default
-    session JWT often does not, so the admin-only exchange uses Clerk's
-    backend API as the verified fallback rather than trusting browser data.
+    session JWT often does not, so KCMS uses Clerk's backend API as the
+    verified fallback rather than trusting browser data.
     """
     if claims.email and claims.email.strip():
         return claims.email.strip().lower()
     if not settings.clerk_secret_key:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "admin identity verification is not configured",
+            "Clerk identity verification is not configured",
         )
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -198,12 +198,12 @@ async def _primary_clerk_email(claims: ClerkClaims) -> str | None:
     except httpx.HTTPError as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "admin identity lookup unavailable",
+            "Clerk identity lookup unavailable",
         ) from exc
     if response.status_code != status.HTTP_200_OK:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "admin identity lookup unavailable",
+            "Clerk identity lookup unavailable",
         )
     try:
         payload = response.json()
@@ -220,7 +220,7 @@ async def _primary_clerk_email(claims: ClerkClaims) -> str | None:
     except (TypeError, AttributeError, KeyError, ValueError):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "admin identity lookup unavailable",
+            "Clerk identity lookup unavailable",
         ) from None
 
 
@@ -233,12 +233,13 @@ async def sign_in_with_clerk(
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
     claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
+    email = await _primary_clerk_email(claims)
     name = claims.name or " ".join(part for part in (claims.first_name, claims.last_name) if part)
     if not name:
-        name = (claims.email or "KCMS user").split("@", 1)[0]
+        name = (email or "KCMS user").split("@", 1)[0]
     async with database.acquire() as connection:
         token, user = await repository.sign_in_with_clerk(
-            connection, claims.sub, claims.email, name
+            connection, claims.sub, email, name
         )
     return Session(token=token, user=_as_auth_user(user))
 

@@ -92,7 +92,43 @@ async def test_admin_clerk_exchange_requires_verified_email_lookup(app, monkeypa
             headers={"Authorization": "Bearer verified-clerk-token"},
         )
         assert response.status_code == 503
-        assert response.json()["detail"] == "admin identity verification is not configured"
+        assert response.json()["detail"] == "Clerk identity verification is not configured"
+    finally:
+        await client.aclose()
+
+
+async def test_customer_clerk_exchange_syncs_admin_from_verified_primary_email(
+    app, monkeypatch
+):
+    email = f"landing-admin-{uuid.uuid4().hex[:8]}@example.com"
+    clerk_id = f"clerk-{uuid.uuid4().hex}"
+    monkeypatch.setattr(settings, "platform_admin_emails", email)
+    monkeypatch.setattr(
+        auth_api,
+        "_verify_clerk_token",
+        lambda _: auth_api.ClerkClaims(sub=clerk_id, name="Landing Admin"),
+    )
+
+    async def primary_email(_: auth_api.ClerkClaims) -> str:
+        return email
+
+    monkeypatch.setattr(auth_api, "_primary_clerk_email", primary_email)
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    try:
+        response = await client.post(
+            "/api/v1/auth/clerk",
+            headers={"Authorization": "Bearer verified-clerk-token"},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["user"]["is_platform_admin"] is True
+
+        client.headers["Authorization"] = f"Bearer {body['token']}"
+        me = await client.get("/api/v1/auth/me")
+        assert me.status_code == 200, me.text
+        assert me.json()["is_platform_admin"] is True
     finally:
         await client.aclose()
 
