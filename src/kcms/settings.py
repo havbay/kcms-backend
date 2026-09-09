@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_environment: str = "production"
     clerk_jwt_issuer: str = ""
+    # Used only when a standard Clerk session JWT does not carry the user's
+    # primary email claim. Never expose this value through the API.
+    clerk_secret_key: str = ""
     # Legacy email signup remains independently configurable. Clerk creates
     # public trial workspaces through the verified token-exchange endpoint.
     public_signup_enabled: bool = False

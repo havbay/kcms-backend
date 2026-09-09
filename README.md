@@ -31,6 +31,7 @@ Migrations run and seed data is inserted automatically on startup.
 | `GET/POST` | `/api/v1/setup-invitations/{token}` | Preview and accept a one-time owner setup link |
 | `POST` | `/api/v1/auth/signin`, `/signout` | Legacy email/password sessions |
 | `POST` | `/api/v1/auth/clerk` | Exchange a verified Clerk session for a KCMS workspace session |
+| `POST` | `/api/v1/admin/auth/clerk` | Exchange a verified Clerk session for an allowlisted platform-admin session |
 | `GET` | `/api/v1/comments` | Searchable, filterable, stably paginated work list with source context |
 | `POST` | `/api/v1/comments/{id}/actions` | Record `HIDE` / `LEAVE` / `UNHIDE`, returns history |
 | `POST` | `/api/v1/comments/{id}/corrections` | Record what a human says the labels should be |
@@ -218,6 +219,8 @@ Administration, metrics with meaningful denominators, and rate limiting.
 | Variable | Purpose |
 |---|---|
 | `CLERK_JWT_ISSUER` | Clerk Frontend API issuer URL used to validate Clerk session JWTs |
+| `CLERK_SECRET_KEY` | Clerk backend key used to resolve the primary email when a standard session JWT omits it |
+| `PLATFORM_ADMIN_EMAILS` | Comma-separated production email allowlist for the platform console |
 
 The frontend needs `VITE_CLERK_PUBLISHABLE_KEY`. Configure it in Vercel; do not
 commit either deployment value. Clerk Facebook login is for KCMS identity. The

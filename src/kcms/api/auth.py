@@ -1,5 +1,7 @@
 from typing import Annotated, Any
+from urllib.parse import quote
 
+import httpx
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -173,6 +175,55 @@ def _verify_clerk_token(token: str) -> ClerkClaims:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session is invalid") from exc
 
 
+async def _primary_clerk_email(claims: ClerkClaims) -> str | None:
+    """Return the verified primary email for a Clerk session.
+
+    Custom Clerk JWT templates may include ``email`` directly. The default
+    session JWT often does not, so the admin-only exchange uses Clerk's
+    backend API as the verified fallback rather than trusting browser data.
+    """
+    if claims.email and claims.email.strip():
+        return claims.email.strip().lower()
+    if not settings.clerk_secret_key:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "admin identity verification is not configured",
+        )
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"https://api.clerk.com/v1/users/{quote(claims.sub, safe='')}",
+                headers={"Authorization": f"Bearer {settings.clerk_secret_key}"},
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "admin identity lookup unavailable",
+        ) from exc
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "admin identity lookup unavailable",
+        )
+    try:
+        payload = response.json()
+        primary_id = payload.get("primary_email_address_id")
+        addresses = payload.get("email_addresses", [])
+        return next(
+            (
+                item["email_address"].strip().lower()
+                for item in addresses
+                if item.get("id") == primary_id and item.get("email_address")
+            ),
+            None,
+        )
+    except (TypeError, AttributeError, KeyError, ValueError):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "admin identity lookup unavailable",
+        ) from None
+
+
 @router.post("/clerk", operation_id="signInWithClerk", response_model=Session)
 async def sign_in_with_clerk(
     authorization: Annotated[str | None, Header()] = None,
@@ -207,7 +258,7 @@ async def sign_in_admin_with_clerk(
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
     claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
-    email = (claims.email or "").strip().lower()
+    email = await _primary_clerk_email(claims)
     if not email or email not in settings.platform_admin_email_set:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "platform administration required")
     name = claims.name or " ".join(part for part in (claims.first_name, claims.last_name) if part)

@@ -76,6 +76,27 @@ async def test_admin_clerk_exchange_rejects_non_allowlisted_identity(app, monkey
         await client.aclose()
 
 
+async def test_admin_clerk_exchange_requires_verified_email_lookup(app, monkeypatch):
+    monkeypatch.setattr(settings, "clerk_secret_key", "")
+    monkeypatch.setattr(
+        auth_api,
+        "_verify_clerk_token",
+        lambda _: auth_api.ClerkClaims(sub="clerk-without-email"),
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    )
+    try:
+        response = await client.post(
+            "/api/v1/admin/auth/clerk",
+            headers={"Authorization": "Bearer verified-clerk-token"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "admin identity verification is not configured"
+    finally:
+        await client.aclose()
+
+
 async def test_admin_clerk_exchange_provisions_allowlisted_identity(app, monkeypatch):
     email = f"clerk-admin-{uuid.uuid4().hex[:8]}@example.com"
     clerk_id = f"clerk-{uuid.uuid4().hex}"
