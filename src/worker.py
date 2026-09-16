@@ -29,6 +29,10 @@ class Default(FastAPIEntrypoint):
         database.set_dsn(settings.database_url)
         return await super().fetch(request)
 
-    async def scheduled(self, controller, env, ctx) -> None:
-        settings.database_url = database_url_from_hyperdrive(env.HYPERDRIVE)
+    async def scheduled(self, controller, env=None, ctx=None) -> None:
+        # The runtime passes None for the env argument; bindings live on
+        # self.env, as in fetch. Reading the argument made every cron
+        # invocation raise AttributeError, so the sweep never ran.
+        settings.database_url = database_url_from_hyperdrive(self.env.HYPERDRIVE)
+        database.set_dsn(settings.database_url)
         await run_scheduled_sweep(database, settings, sweep_once)
