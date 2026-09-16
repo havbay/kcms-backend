@@ -59,7 +59,10 @@ def test_environment_from_bindings_can_defer_hyperdrive_access() -> None:
 async def test_cloudflare_lifespan_skips_process_owned_startup_jobs(monkeypatch) -> None:
     calls: list[str] = []
 
+    connect_kwargs: dict[str, object] = {}
+
     async def connect(*args, **kwargs) -> None:
+        connect_kwargs.update(kwargs)
         calls.append("connect")
 
     async def disconnect() -> None:
@@ -79,6 +82,7 @@ async def test_cloudflare_lifespan_skips_process_owned_startup_jobs(monkeypatch)
         SimpleNamespace(
             database_url="postgresql://example/db",
             database_connect_timeout_seconds=3,
+            database_per_request_connections=True,
             run_migrations_on_startup=False,
             run_quarantine_sweep=False,
             quarantine_sweep_interval_seconds=30,
@@ -93,6 +97,9 @@ async def test_cloudflare_lifespan_skips_process_owned_startup_jobs(monkeypatch)
         pass
 
     assert calls == ["connect", "disconnect"]
+    # Workers cannot reuse a pooled socket across requests, so startup must ask
+    # for per-request connections rather than building a pool it would share.
+    assert connect_kwargs["per_request"] is True
 
 
 @pytest.mark.asyncio
@@ -124,3 +131,52 @@ async def test_scheduled_sweep_owns_its_database_lifecycle() -> None:
 
     assert deleted == 2
     assert calls == ["connect", "postgresql://example/db", 3, "sweep", "disconnect"]
+
+
+@pytest.mark.asyncio
+async def test_per_request_mode_opens_a_fresh_connection_each_time(monkeypatch) -> None:
+    """Workers cannot reuse a socket across requests.
+
+    A pool built at startup belongs to the request that triggered startup, so
+    every later request on that isolate hangs until the runtime cancels it.
+    """
+    from kcms.shared.database.pool import Database
+
+    opened: list[str] = []
+    closed: list[str] = []
+
+    class FakeConnection:
+        def __init__(self, dsn: str) -> None:
+            self.dsn = dsn
+
+        async def close(self) -> None:
+            closed.append(self.dsn)
+
+    async def fake_connect(dsn: str) -> FakeConnection:
+        opened.append(dsn)
+        return FakeConnection(dsn)
+
+    async def fail_create_pool(*args: object, **kwargs: object) -> None:
+        raise AssertionError("per-request mode must not build a pool")
+
+    monkeypatch.setattr("asyncpg.connect", fake_connect)
+    monkeypatch.setattr("asyncpg.create_pool", fail_create_pool)
+
+    db = Database()
+    await db.connect("postgresql://example/one", per_request=True)
+    assert db.connected
+
+    async with db.acquire() as connection:
+        assert connection.dsn == "postgresql://example/one"
+    assert closed == ["postgresql://example/one"]
+
+    # A later request may see a different Hyperdrive address.
+    db.set_dsn("postgresql://example/two")
+    async with db.acquire() as connection:
+        assert connection.dsn == "postgresql://example/two"
+
+    assert opened == ["postgresql://example/one", "postgresql://example/two"]
+    assert closed == ["postgresql://example/one", "postgresql://example/two"]
+
+    await db.disconnect()
+    assert not db.connected

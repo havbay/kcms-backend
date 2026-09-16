@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         await database.connect(
             settings.database_url,
             timeout_seconds=settings.database_connect_timeout_seconds,
+            per_request=settings.database_per_request_connections,
         )
         applied: list[str] = []
         if settings.run_migrations_on_startup:

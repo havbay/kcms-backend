@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://kcms:kcms@127.0.0.1:5432/kcms"
     database_connect_timeout_seconds: float = 5
+    # Cloudflare Workers cannot reuse a pooled socket across requests.
+    database_per_request_connections: bool = False
     run_migrations_on_startup: bool = True
     run_quarantine_sweep: bool = True
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"

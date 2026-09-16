@@ -24,6 +24,9 @@ FastAPIEntrypoint = asgi.entrypoint(app)
 class Default(FastAPIEntrypoint):
     async def fetch(self, request):
         settings.database_url = database_url_from_hyperdrive(self.env.HYPERDRIVE)
+        # Startup runs inside whichever request reached the isolate first, so
+        # the address captured there must not be reused for later requests.
+        database.set_dsn(settings.database_url)
         return await super().fetch(request)
 
     async def scheduled(self, controller, env, ctx) -> None:
