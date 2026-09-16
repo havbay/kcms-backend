@@ -13,6 +13,7 @@ id = "06135a74fcc84b26ba7b4f8997e41839"
 
 [vars]
 CORS_ORIGINS = "https://staging.findmoy.app"
+CLERK_JWT_ISSUER = "https://central-cat-9472.clerk.accounts.dev"
 DATABASE_CONNECT_TIMEOUT_SECONDS = "3"
 PUBLIC_FRONTEND_URL = "https://staging.findmoy.app"
 RUN_MIGRATIONS_ON_STARTUP = "false"
@@ -23,4 +24,4 @@ META_OAUTH_SCOPES = "pages_show_list,pages_read_engagement,pages_read_user_conte
 SENTRY_ENVIRONMENT = "staging"
 
 [secrets]
-required = ["INTEGRATION_ENCRYPTION_KEY"]
+required = ["CLERK_SECRET_KEY", "INTEGRATION_ENCRYPTION_KEY"]
