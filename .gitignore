@@ -1,4 +1,9 @@
 node_modules/
 .env
+.dev.vars*
+.venv-workers/
+.wrangler/
+pylock.toml
+python_modules/
 __pycache__/
 *.py[cod]

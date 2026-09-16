@@ -53,15 +53,21 @@ async def lifespan(app: FastAPI):
     # A failed connection must not stop the service; /health reports DEGRADED.
     sweep_task: asyncio.Task | None = None
     try:
-        await database.connect(settings.database_url)
-        async with database.acquire() as connection:
-            applied = await apply_migrations(connection)
+        await database.connect(
+            settings.database_url,
+            timeout_seconds=settings.database_connect_timeout_seconds,
+        )
+        applied: list[str] = []
+        if settings.run_migrations_on_startup:
+            async with database.acquire() as connection:
+                applied = await apply_migrations(connection)
         logger.info("database ready (migrations=%s)", applied)
         # Only started once the database is actually reachable — without one
         # there is nothing for the sweep to read.
-        sweep_task = asyncio.create_task(
-            run_quarantine_sweep(settings.quarantine_sweep_interval_seconds)
-        )
+        if settings.run_quarantine_sweep:
+            sweep_task = asyncio.create_task(
+                run_quarantine_sweep(settings.quarantine_sweep_interval_seconds)
+            )
     except Exception as exc:
         # Startup must not crash: /health reports DEGRADED instead. But the
         # reason has to be visible, or a misconfigured DATABASE_URL is

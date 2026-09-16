@@ -1,0 +1,38 @@
+name = "findmoy-api-production"
+main = "src/worker.py"
+compatibility_date = "2026-09-16"
+compatibility_flags = ["python_workers"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[triggers]
+crons = ["* * * * *"]
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "7d5473c2fec14b23b1239013701d5834"
+
+[vars]
+CORS_ORIGINS = "https://findmoy.app"
+DATABASE_CONNECT_TIMEOUT_SECONDS = "3"
+PUBLIC_FRONTEND_URL = "https://findmoy.app"
+RUN_MIGRATIONS_ON_STARTUP = "false"
+RUN_QUARANTINE_SWEEP = "false"
+META_GRAPH_VERSION = "v26.0"
+META_OAUTH_REDIRECT_URI = "https://api.findmoy.app/api/v1/facebook/oauth/callback"
+META_OAUTH_SCOPES = "pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_engagement,pages_manage_metadata"
+SENTRY_ENVIRONMENT = "production"
+
+[secrets]
+required = [
+  "CLERK_JWT_ISSUER",
+  "CLERK_SECRET_KEY",
+  "INTEGRATION_ENCRYPTION_KEY",
+  "META_APP_ID",
+  "META_APP_SECRET",
+  "META_LOGIN_CONFIG_ID",
+  "PLATFORM_ADMIN_EMAILS",
+  "SENTRY_DSN",
+]

@@ -5,7 +5,7 @@ description = "KCMS — Khmer comment moderation backend"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
+    "uvicorn[standard]>=0.32; sys_platform != 'emscripten'",
     "asyncpg>=0.30",
     "cryptography>=45.0",
     "httpx>=0.27",
@@ -21,6 +21,8 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
     "asgi-lifespan>=2.1.0",
+    "workers-py>=1.17.3",
+    "workers-runtime-sdk>=1.8.4",
 ]
 
 [build-system]

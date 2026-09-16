@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://kcms:kcms@127.0.0.1:5432/kcms"
+    database_connect_timeout_seconds: float = 5
+    run_migrations_on_startup: bool = True
+    run_quarantine_sweep: bool = True
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     contract_version: str = "1.0.0"
     sentry_dsn: str = ""
