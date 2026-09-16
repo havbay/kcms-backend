@@ -24,8 +24,11 @@ class _PerRequestConnection:
         self._connection: asyncpg.Connection | None = None
 
     async def __aenter__(self) -> asyncpg.Connection:
-        self._connection = await asyncio.wait_for(
-            asyncpg.connect(self._dsn), timeout=self._timeout_seconds
+        # asyncpg's own timeout rather than asyncio.wait_for: wait_for wraps the
+        # awaitable in a nested task, which Pyodide rejects with "Cannot enter a
+        # promising task from inside another running promising task".
+        self._connection = await asyncpg.connect(
+            self._dsn, timeout=self._timeout_seconds
         )
         return self._connection
 

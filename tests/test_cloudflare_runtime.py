@@ -152,7 +152,9 @@ async def test_per_request_mode_opens_a_fresh_connection_each_time(monkeypatch) 
         async def close(self) -> None:
             closed.append(self.dsn)
 
-    async def fake_connect(dsn: str) -> FakeConnection:
+    async def fake_connect(dsn: str, timeout: float | None = None) -> FakeConnection:
+        # asyncpg's own timeout, not a nested asyncio.wait_for task.
+        assert timeout is not None
         opened.append(dsn)
         return FakeConnection(dsn)
 
