@@ -1,3 +1,4 @@
+import time
 from typing import Annotated, Any
 from urllib.parse import quote
 
@@ -159,16 +160,66 @@ async def sign_in_with_telegram(body: TelegramRequest) -> Session:
     return Session(token=token, user=_as_auth_user(user))
 
 
-def _verify_clerk_token(token: str) -> ClerkClaims:
+_JWKS_TTL_SECONDS = 600.0
+_jwks_cache: dict[str, tuple[float, jwt.PyJWKSet]] = {}
+
+
+async def _clerk_jwk_set(issuer: str, *, refresh: bool = False) -> jwt.PyJWKSet:
+    """Fetch Clerk's signing keys over async HTTP.
+
+    ``jwt.PyJWKClient`` fetches JWKS with blocking ``urllib.request``. Cloudflare
+    Python Workers cannot perform synchronous socket I/O, so that call raises
+    ``PyJWKClientConnectionError`` — a ``PyJWTError`` subclass that the caller
+    used to swallow, turning every signed-in request into a bare 401.
+    """
+    cached = _jwks_cache.get(issuer)
+    now = time.monotonic()
+    if not refresh and cached is not None and now - cached[0] < _JWKS_TTL_SECONDS:
+        return cached[1]
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{issuer}/.well-known/jwks.json")
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Clerk signing keys unavailable"
+        ) from exc
+    if response.status_code != status.HTTP_200_OK:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Clerk signing keys unavailable"
+        )
+    try:
+        jwk_set = jwt.PyJWKSet.from_dict(response.json())
+    except (jwt.PyJWTError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Clerk signing keys unavailable"
+        ) from exc
+    _jwks_cache[issuer] = (now, jwk_set)
+    return jwk_set
+
+
+def _signing_key_for(jwk_set: jwt.PyJWKSet, kid: str | None) -> jwt.PyJWK | None:
+    return next((key for key in jwk_set.keys if key.key_id == kid), None)
+
+
+async def _verify_clerk_token(token: str) -> ClerkClaims:
     if not settings.clerk_jwt_issuer:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Clerk authentication is not configured"
         )
     issuer = settings.clerk_jwt_issuer.rstrip("/")
     try:
-        signing_key = jwt.PyJWKClient(
-            f"{issuer}/.well-known/jwks.json"
-        ).get_signing_key_from_jwt(token)
+        kid = jwt.get_unverified_header(token).get("kid")
+    except (jwt.PyJWTError, ValueError) as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session is invalid") from exc
+    jwk_set = await _clerk_jwk_set(issuer)
+    signing_key = _signing_key_for(jwk_set, kid)
+    if signing_key is None:
+        # Clerk rotated its keys since the cache was filled.
+        jwk_set = await _clerk_jwk_set(issuer, refresh=True)
+        signing_key = _signing_key_for(jwk_set, kid)
+    if signing_key is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session is invalid")
+    try:
         claims = jwt.decode(token, signing_key.key, algorithms=["RS256"], issuer=issuer)
         return ClerkClaims.model_validate(claims)
     except (jwt.PyJWTError, ValueError) as exc:
@@ -232,7 +283,7 @@ async def sign_in_with_clerk(
     _require_database()
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
-    claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
+    claims = await _verify_clerk_token(authorization.split(" ", 1)[1].strip())
     email = await _primary_clerk_email(claims)
     name = claims.name or " ".join(part for part in (claims.first_name, claims.last_name) if part)
     if not name:
@@ -258,7 +309,7 @@ async def sign_in_admin_with_clerk(
     _require_database()
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Clerk session required")
-    claims = _verify_clerk_token(authorization.split(" ", 1)[1].strip())
+    claims = await _verify_clerk_token(authorization.split(" ", 1)[1].strip())
     email = await _primary_clerk_email(claims)
     if not email or email not in settings.platform_admin_email_set:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "platform administration required")
